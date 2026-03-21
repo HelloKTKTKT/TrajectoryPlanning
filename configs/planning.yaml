@@ -14,3 +14,7 @@ global_linear_mpc:
   qn_acceleration: [0.2, 0.2, 0.2]
 
   r_jerk: [0.1, 0.1, 0.1]
+
+local_planner:
+  ctrl_pt_dist: 0.4
+  planning_horizon: 5.0

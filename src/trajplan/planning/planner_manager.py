@@ -7,6 +7,7 @@ from trajplan.quadrotor.command import QuadrotorCommand
 from trajplan.quadrotor.state import QuadrotorState
 from trajplan.shared_types import Vector
 from trajplan.trajectory.linear_mpc import LinearMpcConfig, LinearMpcTrajectory
+from trajplan.map.grid_map import GridMap
 
 
 class PlannerManager:
@@ -19,6 +20,7 @@ class PlannerManager:
     - maintain a global LMPC trajectory and its progress
     - decide whether to finish, hover, keep the old command, or replan
     - decide local start pva and local target pva
+    - select local target pva based on planning_horizon threshold
     - call the local planner to generate a new local trajectory
     """
 
@@ -26,23 +28,24 @@ class PlannerManager:
         self,
         local_planner: LocalPlanner,
         global_lmpc_config: LinearMpcConfig,
+        grid_map: GridMap,
         goal_tolerance: float = 0.2,
-        local_target_distance: float = 3.0,
+        planning_horizon: float = 3.0,
     ) -> None:
         self.local_planner = local_planner
         self.global_lmpc_config = global_lmpc_config
+        self.grid_map = grid_map
 
         self.goal_tolerance = float(goal_tolerance)
-        self.local_target_distance = float(local_target_distance)
+        self.planning_horizon = float(planning_horizon)
 
         if self.goal_tolerance <= 0.0:
             raise ValueError(
                 f"Expected goal_tolerance > 0, but got {self.goal_tolerance}."
             )
-        if self.local_target_distance <= 0.0:
+        if self.planning_horizon <= 0.0:
             raise ValueError(
-                "Expected local_target_distance > 0, "
-                f"but got {self.local_target_distance}."
+                f"Expected planning_horizon > 0, but got {self.planning_horizon}."
             )
 
         self.active_goal_position: Vector | None = None
@@ -177,7 +180,7 @@ class PlannerManager:
            trajectory whose position is closest to local_start_pva[:3].
         2. Update global_progress to that closest time.
         3. Continue forward until the distance from the local start position
-           exceeds local_target_distance.
+           exceeds planning_horizon.
         4. Return the corresponding pva as local target.
         """
         if self.global_trajectory is None:
@@ -217,7 +220,7 @@ class PlannerManager:
             position = pva[:3]
             distance = np.linalg.norm(position - start_position)
 
-            if distance >= self.local_target_distance:
+            if distance >= self.planning_horizon:
                 local_target_pva = pva
                 break
 
@@ -304,21 +307,36 @@ class PlannerManager:
 
         command_for_local_planner = None if goal_switched else active_command
 
-        trajectory = self.local_planner.plan(
+        planning_result = self.local_planner.plan(
+            grid_map=self.grid_map,
             active_command=command_for_local_planner,
             local_start_pva=local_start_pva,
             local_target_pva=local_target_pva,
             current_time=current_time,
         )
 
-        if trajectory is None:
+        if planning_result.status == "failure":
             return QuadrotorCommand.hover(
                 start_time=current_time,
-                message="Local planning failed.",
+                message=planning_result.message,
+            )
+
+        if planning_result.status == "target_close":
+            if active_command is not None and active_command.is_track:
+                return active_command
+            return QuadrotorCommand.hover(
+                start_time=current_time,
+                message=planning_result.message,
+            )
+
+        if planning_result.status != "success" or planning_result.trajectory is None:
+            return QuadrotorCommand.hover(
+                start_time=current_time,
+                message="Unexpected local planning result.",
             )
 
         return QuadrotorCommand.track(
-            trajectory=trajectory,
+            trajectory=planning_result.trajectory,
             start_time=current_time,
-            message="New local trajectory committed.",
+            message=planning_result.message,
         )
