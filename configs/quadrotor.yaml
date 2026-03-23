@@ -1,5 +1,0 @@
-limits:
-  max_velocity_3d: [4.0, 4.0, 4.0]
-  max_acceleration_3d: [5.0, 5.0, 5.0]
-  max_jerk_3d: [10.0, 10.0, 10.0]
-  
