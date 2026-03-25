@@ -1,0 +1,29 @@
+# Swarm configuration for run_swarm_demo.py
+#
+# Drone names are NOT listed here — they are read automatically from
+# crazyflies.yaml via Crazyswarm (swarm.allcfs.crazyflies).
+#
+# This file only holds swarm-wide settings and per-drone goal lists.
+# A drone with no entry in 'goals' will hover in place after takeoff.
+
+# Set true for Crazyswarm2 sim backend (backend:=sim), false for real hardware.
+sim_mode: true
+
+# Minimum separation radius [m] injected around each drone's current position
+# as a temporary obstacle in the other drones' planning maps.
+# Must be >= grid_map.resolution (0.1 m) to mark at least one voxel.
+inter_drone_safe_radius: 0.4
+
+# Per-drone goal waypoints (world frame, metres).
+# Goals are visited in order; the drone lands after the last goal is reached.
+# Both drones fly the same horizontal corners but at different heights.
+# Final waypoints diverge so they land at separate positions (3 m apart).
+goals:
+  cf6:                        # 0.5 m altitude — lands at SW corner (-1.5, -1.5)
+    - [1.5,  1.5, 0.5]
+    - [1.5, -1.5, 0.5]
+    - [-1.5, -1.5, 0.5]
+  cf5:                        # 1.0 m altitude — lands at NW corner (-1.5,  1.5)
+    - [1.5,  1.5, 1.0]
+    - [1.5, -1.5, 1.0]
+    - [-1.5,  1.5, 1.0]

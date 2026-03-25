@@ -1,0 +1,17 @@
+# Crazyflie hardware limits
+# These are significantly lower than the simulation defaults to stay within
+# the physical capabilities of a Crazyflie 2.x in a typical indoor space.
+#
+# Reference (Crazyflie 2.1 typical safe values):
+#   max velocity    ~1.5 m/s  (can go higher but less safe indoors)
+#   max acceleration ~2.0 m/s²
+#   max jerk        ~4.0 m/s³
+
+# limits:
+#   max_velocity_3d: [2.5, 2.5, 4.0]
+#   max_acceleration_3d: [3.5, 3.5, 5.0]
+#   max_jerk_3d: [6.0,6.0,6.0]
+limits:
+  max_velocity_3d:     [1.5, 1.5, 1.0]   # m/s   (sim: [4.0, 4.0, 4.0])
+  max_acceleration_3d: [2.0, 2.0, 1.5]   # m/s²  (sim: [5.0, 5.0, 5.0])
+  max_jerk_3d:         [4.0, 4.0, 3.0]   # m/s³  (sim: [10.0, 10.0, 10.0])
