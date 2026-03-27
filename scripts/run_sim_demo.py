@@ -126,15 +126,15 @@ def build_grid_map(planning_cfg: dict[str, Any]) -> GridMap:
     size = np.asarray(planning_cfg["grid_map"]["map_size"], dtype=np.int64)
     grid_map = GridMap(resolution=resolution, origin=origin, map_size=size)
 
-    # grid_map.add_obstacle(
-    #     obs_start_index=np.array([10, 30, 0], dtype=np.int64),
-    #     obs_size=np.array([30, 10, 30], dtype=np.int64),
-    # )
+    grid_map.add_obstacle(
+        obs_start_index=np.array([10, 30, 0], dtype=np.int64),
+        obs_size=np.array([30, 10, 30], dtype=np.int64),
+    )
 
-    # grid_map.add_obstacle(
-    #     obs_start_index=np.array([20, 10, 0], dtype=np.int64),
-    #     obs_size=np.array([20, 10, 30], dtype=np.int64),
-    # )
+    grid_map.add_obstacle(
+        obs_start_index=np.array([20, 10, 0], dtype=np.int64),
+        obs_size=np.array([20, 10, 30], dtype=np.int64),
+    )
 
     return grid_map
 
@@ -201,9 +201,8 @@ def main() -> None:
         backend=sim_backend,
     )
 
-    planner_manager.add_goal(np.array([0.5, 0.5, 1.5], dtype=np.float64))
-    # planner_manager.add_goal(np.array([4.5, 4.5, 1.0], dtype=np.float64))
-    # planner_manager.add_goal(np.array([1.0, 2.0, 0.5], dtype=np.float64))
+    planner_manager.add_goal(np.array([4.5, 4.5, 1.0], dtype=np.float64))
+    planner_manager.add_goal(np.array([1.0, 2.0, 0.5], dtype=np.float64))
 
     # ------------------------------------------------------------------
     # Main loop settings
@@ -245,7 +244,7 @@ def main() -> None:
             agent.set_active_command(new_command)
             next_plan_time += dt_plan
 
-            # print(f"new command: {new_command.mode}")
+            print(f"new command: {new_command.mode}")
 
             # _show_plan_step(
             #     grid_map=grid_map,
@@ -254,7 +253,6 @@ def main() -> None:
             #     new_command=new_command,
             #     sim_time=sim_time,
             # )
-        print(f"agent command: {agent.active_command.mode}")
         agent.step(dt=dt_exec, now_time=sim_time)
 
         sim_time += dt_exec

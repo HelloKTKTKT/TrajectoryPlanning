@@ -24,7 +24,7 @@ local_planner:
 bspline_optimizer:
   lambda_smooth: 1.0
   lambda_dist: 1.0
-  lambda_feasibility:  0.5
+  lambda_feasibility: 0.5
   lambda_fitness: 1.0
   tol: 1.0e-5
   safe_dist: 0.5
