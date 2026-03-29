@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from trajplan.shared_types import Vector
 
-class Backend:
-    def apply_control(
+
+class CommonBackend:
+    def send_reference_pva(
         self,
-        control,
-        dt: float | None = None,
+        pva: Vector,
     ) -> None:
+        raise NotImplementedError
+
+    def stop(self) -> None:
         raise NotImplementedError

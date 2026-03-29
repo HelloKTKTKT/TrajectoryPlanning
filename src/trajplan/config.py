@@ -8,6 +8,13 @@ from trajplan.planning.local_planner import LocalPlannerConfig
 from trajplan.planning.planner_manager import PlannerManagerConfig
 from trajplan.trajectory.linear_mpc import LinearMpcConfig
 
+from trajplan.quadrotor.model import (
+    QuadrotorPhysicalConfig,
+    compute_inertia_matrix,
+)
+from trajplan.controller import DifferentialFlatnessControllerConfig
+
+
 from trajplan.shared_types import Matrix
 
 import numpy as np
@@ -182,6 +189,205 @@ def build_linear_mpc_config(
     )
 
 
+def build_quadrotor_physical_config(
+    quadrotor_cfg: dict[str, Any],
+) -> QuadrotorPhysicalConfig:
+    if "physical" not in quadrotor_cfg:
+        raise ValueError("quadrotor config must contain 'physical'.")
+
+    physical_cfg = quadrotor_cfg["physical"]
+
+    rotor_count = int(physical_cfg["rotor_count"])
+
+    mass = float(physical_cfg["mass"])
+    arm_length = float(physical_cfg["arm_length"])
+    motor_weight = float(physical_cfg["motor_weight"])
+
+    body_box_size = np.asarray(
+        physical_cfg["body_box_size"],
+        dtype=np.float64,
+    ).reshape(-1)
+    if body_box_size.shape != (3,):
+        raise ValueError(
+            f"Expected body_box_size shape (3,), but got {body_box_size.shape}."
+        )
+    box_x, box_y, box_z = body_box_size.tolist()
+
+    body_real_z = float(physical_cfg["body_real_z"])
+    align_angle_rad = float(physical_cfg["align_angle_rad"])
+
+    air_density = float(physical_cfg["air_density"])
+    propeller_diameter = float(physical_cfg["propeller_diameter"])
+    thrust_coefficient = float(physical_cfg["thrust_coefficient"])
+    power_coefficient = float(physical_cfg["power_coefficient"])
+    max_rpm = float(physical_cfg["max_rpm"])
+
+    if rotor_count != 4:
+        raise ValueError(
+            f"Current implementation expects rotor_count == 4, but got {rotor_count}."
+        )
+    if mass <= 0.0:
+        raise ValueError(f"Expected mass > 0, but got {mass}.")
+    if arm_length <= 0.0:
+        raise ValueError(f"Expected arm_length > 0, but got {arm_length}.")
+    if motor_weight < 0.0:
+        raise ValueError(f"Expected motor_weight >= 0, but got {motor_weight}.")
+    if np.any(body_box_size <= 0.0):
+        raise ValueError(
+            f"Expected positive body_box_size entries, but got {body_box_size}."
+        )
+    if air_density <= 0.0:
+        raise ValueError(f"Expected air_density > 0, but got {air_density}.")
+    if propeller_diameter <= 0.0:
+        raise ValueError(
+            f"Expected propeller_diameter > 0, but got {propeller_diameter}."
+        )
+    if thrust_coefficient <= 0.0:
+        raise ValueError(
+            f"Expected thrust_coefficient > 0, but got {thrust_coefficient}."
+        )
+    if power_coefficient <= 0.0:
+        raise ValueError(
+            f"Expected power_coefficient > 0, but got {power_coefficient}."
+        )
+    if max_rpm <= 0.0:
+        raise ValueError(f"Expected max_rpm > 0, but got {max_rpm}.")
+
+    max_rps = max_rpm / 60.0
+    max_force = thrust_coefficient * air_density * propeller_diameter**4 * max_rps**2
+    max_rotor_torque = (
+        power_coefficient
+        * air_density
+        * propeller_diameter**5
+        * max_rps**2
+        / (2.0 * np.pi)
+    )
+    torque_force_ratio = max_rotor_torque / max_force
+
+    box_mass = mass - rotor_count * motor_weight
+    if box_mass <= 0.0:
+        raise ValueError(
+            f"Expected positive box_mass, but got {box_mass}. "
+            "Check mass and motor_weight."
+        )
+
+    proj_len = arm_length * np.sin(align_angle_rad)
+    quad_poses = np.array(
+        [
+            [proj_len, proj_len, body_real_z],
+            [-proj_len, -proj_len, body_real_z],
+            [proj_len, -proj_len, body_real_z],
+            [-proj_len, proj_len, body_real_z],
+        ],
+        dtype=np.float64,
+    )
+
+    inertia_matrix = compute_inertia_matrix(
+        box_x=box_x,
+        box_y=box_y,
+        box_z=box_z,
+        box_mass=box_mass,
+        motor_weight=motor_weight,
+        quad_poses=quad_poses,
+    )
+    inertia_inv = np.linalg.inv(inertia_matrix)
+
+    rforce2pseudo = np.array(
+        [
+            [1.0, 1.0, 1.0, 1.0],
+            [proj_len, -proj_len, proj_len, -proj_len],
+            [-proj_len, proj_len, proj_len, -proj_len],
+            [
+                -torque_force_ratio,
+                -torque_force_ratio,
+                torque_force_ratio,
+                torque_force_ratio,
+            ],
+        ],
+        dtype=np.float64,
+    )
+    pseudo2rforce = np.linalg.inv(rforce2pseudo)
+
+    return QuadrotorPhysicalConfig(
+        rotor_count=rotor_count,
+        mass=mass,
+        arm_length=arm_length,
+        motor_weight=motor_weight,
+        body_box_size=body_box_size,
+        body_real_z=body_real_z,
+        align_angle_rad=align_angle_rad,
+        air_density=air_density,
+        propeller_diameter=propeller_diameter,
+        thrust_coefficient=thrust_coefficient,
+        power_coefficient=power_coefficient,
+        max_rpm=max_rpm,
+        max_rps=max_rps,
+        max_force=max_force,
+        max_rotor_torque=max_rotor_torque,
+        torque_force_ratio=torque_force_ratio,
+        box_mass=box_mass,
+        quad_poses=quad_poses,
+        inertia_matrix=inertia_matrix,
+        inertia_inv=inertia_inv,
+        rforce2pseudo=rforce2pseudo,
+        pseudo2rforce=pseudo2rforce,
+    )
+
+
+def build_differential_flatness_controller_config(
+    quadrotor_cfg: dict[str, Any],
+) -> DifferentialFlatnessControllerConfig:
+    if "controller" not in quadrotor_cfg:
+        raise ValueError("quadrotor config must contain 'controller'.")
+
+    controller_cfg = quadrotor_cfg["controller"]
+
+    if "differential_flatness" not in controller_cfg:
+        raise ValueError(
+            "quadrotor config['controller'] must contain 'differential_flatness'."
+        )
+
+    df_cfg = controller_cfg["differential_flatness"]
+
+    kp = _as_diag_matrix_from_3_weights(df_cfg["kp"])
+    kv = _as_diag_matrix_from_3_weights(df_cfg["kv"])
+    ka = _as_diag_matrix_from_3_weights(df_cfg["ka"])
+    kvi = _as_diag_matrix_from_3_weights(df_cfg["kvi"])
+
+    kq = _as_diag_matrix_from_3_weights(df_cfg["kq"])
+    kw = _as_diag_matrix_from_3_weights(df_cfg["kw"])
+
+    bw_max = np.asarray(df_cfg["bw_max"], dtype=np.float64).reshape(-1)
+    if bw_max.shape != (3,):
+        raise ValueError(f"Expected bw_max shape (3,), but got {bw_max.shape}.")
+
+    qp_weight_diag = np.asarray(df_cfg["qp_weight"], dtype=np.float64).reshape(-1)
+    if qp_weight_diag.shape != (4,):
+        raise ValueError(
+            f"Expected qp_weight shape (4,), but got {qp_weight_diag.shape}."
+        )
+    qp_weight = np.diag(qp_weight_diag)
+
+    return DifferentialFlatnessControllerConfig(
+        kp=kp,
+        kv=kv,
+        ka=ka,
+        kvi=kvi,
+        kq=kq,
+        kw=kw,
+        ep_max=float(df_cfg["ep_max"]),
+        ev_max=float(df_cfg["ev_max"]),
+        bw_max=bw_max,
+        sat_int_ev=float(df_cfg["sat_int_ev"]),
+        minimum_thrust=float(df_cfg["minimum_thrust"]),
+        maximum_thrust=float(df_cfg["maximum_thrust"]),
+        epsilon=float(df_cfg["epsilon"]),
+        rotor_force_min=float(df_cfg["rotor_force_min"]),
+        rotor_force_max_scale=float(df_cfg["rotor_force_max_scale"]),
+        qp_weight=qp_weight,
+    )
+
+
 def _build_triple_integrator_discrete_model(ts: float) -> tuple[Matrix, Matrix]:
     if ts <= 0.0:
         raise ValueError(f"Expected ts > 0, but got {ts}.")
@@ -225,3 +431,14 @@ def _as_diag_matrix_from_3x3_weights(
         raise ValueError(f"Expected 3 acceleration weights, but got shape {wa.shape}.")
 
     return np.diag(np.hstack((wp, wv, wa)))
+
+
+def _as_diag_matrix_from_3_weights(
+    weights: list[float] | tuple[float, float, float],
+) -> Matrix:
+    weights_array = np.asarray(weights, dtype=np.float64).reshape(-1)
+
+    if weights_array.shape != (3,):
+        raise ValueError(f"Expected 3 weights, but got shape {weights_array.shape}.")
+
+    return np.diag(weights_array)

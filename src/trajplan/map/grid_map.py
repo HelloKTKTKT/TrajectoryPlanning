@@ -553,5 +553,4 @@ class GridMap:
                 label="trajectory",
             )
 
-        ax.legend(loc="upper left", fontsize=8)
         return ax

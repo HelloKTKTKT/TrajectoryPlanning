@@ -54,6 +54,13 @@ class PlannerManagerProcess(Process):
                 )
                 tick_output = PlannerTickOutput(command=command)
                 put_latest(self.planner_manager_agent_queues.pm_to_agent, tick_output)
+                print(
+                    "[PlannerManagerProcess] "
+                    f"t={tick_input.timestamp:.3f}, "
+                    f"command={command.mode}, "
+                    f"message={command.message}",
+                    flush=True,
+                )
                 last_plan_time = tick_input.timestamp
                 if command.mode == QuadrotorMode.FINISH:
                     self.stop_event.set()

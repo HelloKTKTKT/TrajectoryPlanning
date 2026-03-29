@@ -2,119 +2,150 @@ from __future__ import annotations
 
 import numpy as np
 
-from trajplan.controller import Controller
+from trajplan.controller import DifferentialFlatnessController
 from trajplan.quadrotor.command import QuadrotorCommand
 from trajplan.quadrotor.state import QuadrotorState
-from trajplan.runtime.backend import Backend
+from trajplan.runtime.backend import CommonBackend
+from trajplan.runtime.sim_backend import SimBackend
 from trajplan.runtime.state_provider import StateProvider
 from trajplan.shared_types import Vector
 
 
 class QuadrotorAgent:
-    """
-    Minimal quadrotor agent execution loop.
-
-    Responsibilities
-    ----------------
-    - get the latest quadrotor state
-    - read the latest committed command
-    - convert the command into a reference pva
-    - call controller to compute control
-    - send control to backend
-
-    Important design note
-    ---------------------
-    This class does not call the planner manager directly.
-    Planning should run asynchronously outside this class and update the
-    active command through `set_active_command()`.
-    """
-
     def __init__(
         self,
-        controller: Controller,
         state_provider: StateProvider,
-        backend: Backend,
+        backend: CommonBackend,
+        controller: DifferentialFlatnessController | None = None,
     ) -> None:
-        self.controller = controller
         self.state_provider = state_provider
         self.backend = backend
+        self.controller = controller
 
         self.active_command: QuadrotorCommand | None = None
         self.current_state: QuadrotorState | None = None
+        self.current_reference_pva: Vector | None = None
+        self.is_finished = False
 
-        self.is_finished: bool = False
+        self._hover_reference_pva: Vector | None = None
+        self._hover_reference_key: tuple[str, float] | None = None
 
-    def set_active_command(self, command: QuadrotorCommand) -> None:
-        """
-        Replace the current active command.
-
-        This method is intended to be called by an external planning loop.
-        """
+    def set_active_command(
+        self,
+        command: QuadrotorCommand,
+    ) -> None:
         self.active_command = command
 
     def clear_active_command(self) -> None:
-        """
-        Clear the current command.
-
-        The agent will fall back to hover behavior.
-        """
         self.active_command = None
 
     def get_current_state(self) -> QuadrotorState | None:
-        """
-        Return the latest cached state.
-        """
-        return self.current_state
+        if self.current_state is None:
+            return None
+        return self.current_state.copy()
+
+    def get_current_reference_pva(self) -> Vector | None:
+        if self.current_reference_pva is None:
+            return None
+        return self.current_reference_pva.copy()
 
     def step(
         self,
         dt: float,
         now_time: float,
     ) -> None:
-        """
-        Run one execution step.
-
-        Parameters
-        ----------
-        dt
-            Optional control interval.
-            In simulation it can be passed to the backend.
-            In real flight it can be ignored by the backend if not needed.
-        """
         if self.is_finished:
             return
 
-        current_state = self.state_provider.get_state()
-        self.current_state = current_state
+        if not self.state_provider.is_initialized():
+            return
 
+        current_state = self.state_provider.get_state()
+        if current_state is None:
+            return
+
+        self.current_state = current_state
         command = self.active_command
 
         if command is None:
-            reference_pva = self._build_hover_reference(current_state)
+            reference_pva = self._get_hover_reference(
+                current_state=current_state,
+                hover_key=("no_command", -1.0),
+            )
 
         elif command.is_finish:
             self.is_finished = True
+            self._clear_hover_reference()
+            self.current_reference_pva = None
+            self.backend.stop()
             return
 
         elif command.is_hover:
-            reference_pva = self._build_hover_reference(current_state)
+            reference_pva = self._get_hover_reference(
+                current_state=current_state,
+                hover_key=("hover", command.start_time),
+            )
 
-        else:
+        elif command.is_track:
+            self._clear_hover_reference()
             reference_pva = command.sample_pva(now_time)
 
-        control = self.controller.compute_control(
+        else:
+            raise ValueError(f"Unsupported command mode: {command.mode}")
+
+        self.current_reference_pva = np.asarray(
+            reference_pva,
+            dtype=np.float64,
+        ).reshape(-1)
+        self._execute_reference(
             current_state=current_state,
             reference_pva=reference_pva,
+            dt=dt,
         )
-        # self.backend.apply_control(control=control, dt=dt)
-        self.backend.apply_control_direct_set_pva(pva=reference_pva)
+
+    def _execute_reference(
+        self,
+        current_state: QuadrotorState,
+        reference_pva: Vector,
+        dt: float,
+    ) -> None:
+        if isinstance(self.backend, SimBackend):
+            if self.controller is None:
+                raise RuntimeError(
+                    "Simulation path requires a controller, but controller is None."
+                )
+
+            rotor_thrust = self.controller.compute_control(
+                current_state=current_state,
+                reference_pva=reference_pva,
+            )
+            self.backend.apply_control(
+                control=np.asarray(rotor_thrust, dtype=np.float64).reshape(-1),
+                dt=dt,
+            )
+            return
+
+        self.backend.send_reference_pva(reference_pva)
+
+    def _get_hover_reference(
+        self,
+        current_state: QuadrotorState,
+        hover_key: tuple[str, float],
+    ) -> Vector:
+        if self._hover_reference_pva is None or self._hover_reference_key != hover_key:
+            self._hover_reference_pva = self._build_hover_reference(current_state)
+            self._hover_reference_key = hover_key
+
+        return self._hover_reference_pva.copy()
+
+    def _clear_hover_reference(self) -> None:
+        self._hover_reference_pva = None
+        self._hover_reference_key = None
 
     @staticmethod
-    def _build_hover_reference(current_state: QuadrotorState) -> Vector:
-        """
-        Build a hover reference using current position with zero velocity
-        and zero acceleration.
-        """
-        position = current_state.pva[:3]
+    def _build_hover_reference(
+        current_state: QuadrotorState,
+    ) -> Vector:
+        position = np.asarray(current_state.position, dtype=np.float64).reshape(-1)
         zeros = np.zeros(6, dtype=np.float64)
         return np.hstack((position, zeros))

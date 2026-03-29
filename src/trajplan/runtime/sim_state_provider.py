@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import numpy as np
-
 from trajplan.quadrotor.state import QuadrotorState
+from trajplan.runtime.state_provider import StateProvider
 
 
-class SimStateProvider:
+class SimStateProvider(StateProvider):
     """
     Minimal simulation state provider.
 
@@ -19,12 +18,15 @@ class SimStateProvider:
         if initial_state is None:
             initial_state = QuadrotorState()
 
-        self._state = QuadrotorState(
-            pva=np.asarray(initial_state.pva, dtype=np.float64).copy()
-        )
+        self._state = initial_state.copy()
+
+        self._initialized = True
 
     def get_state(self) -> QuadrotorState:
-        return QuadrotorState(pva=self._state.pva.copy())
+        return self._state.copy()
 
     def set_state(self, state: QuadrotorState) -> None:
-        self._state = QuadrotorState(pva=np.asarray(state.pva, dtype=np.float64).copy())
+        self._state = state.copy()
+
+    def is_initialized(self) -> bool:
+        return self._initialized
