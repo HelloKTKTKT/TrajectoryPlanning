@@ -36,10 +36,27 @@ class MocapStateProvider(StateProvider):
                 "geometry_msgs/nav_msgs are not available. "
                 "Make sure the ROS2 workspace is sourced."
             ) from exc
+        try:
+            import rclpy
+            from rclpy.executors import SingleThreadedExecutor
+        except ImportError as exc:
+            raise ImportError(
+                "rclpy is not available. Make sure the ROS2 workspace is sourced."
+            ) from exc
+        try:
+            import rclpy
+            from rclpy.executors import SingleThreadedExecutor
+        except ImportError as exc:
+            raise ImportError(
+                "rclpy is not available. Make sure the ROS2 workspace is sourced."
+            ) from exc
 
         self._node = node
         self._cf_name = str(cf_name)
         self._ema_alpha = float(ema_alpha)
+        self._executor = None
+        self._spin_stop_event = threading.Event()
+        self._spin_thread: threading.Thread | None = None
 
         if not (0.0 < self._ema_alpha <= 1.0):
             raise ValueError(
@@ -69,6 +86,28 @@ class MocapStateProvider(StateProvider):
             10,
         )
 
+        node_executor = getattr(node, "executor", None)
+        if node_executor is None:
+            self._executor = SingleThreadedExecutor()
+            self._executor.add_node(node)
+            self._spin_thread = threading.Thread(
+                target=self._spin_executor,
+                name=f"mocap-spin-{self._cf_name}",
+                daemon=True,
+            )
+            self._spin_thread.start()
+
+        node_executor = getattr(node, "executor", None)
+        if node_executor is None:
+            self._executor = SingleThreadedExecutor()
+            self._executor.add_node(node)
+            self._spin_thread = threading.Thread(
+                target=self._spin_executor,
+                name=f"mocap-spin-{self._cf_name}",
+                daemon=True,
+            )
+            self._spin_thread.start()
+
     def get_state(self) -> QuadrotorState | None:
         if not self._initialized:
             return None
@@ -90,6 +129,9 @@ class MocapStateProvider(StateProvider):
         )
         with self._lock:
             self._ekf_vel = vel
+
+    def close(self) -> None:
+        self._close_executor()
 
     def _pose_callback(self, msg) -> None:
         stamp_sec = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
@@ -143,3 +185,25 @@ class MocapStateProvider(StateProvider):
             self._prev_acc = acc.copy()
             self._prev_stamp = stamp_sec
             self._initialized = True
+
+    def _spin_executor(self) -> None:
+        if self._executor is None:
+            return
+
+        while not self._spin_stop_event.is_set():
+            self._executor.spin_once(timeout_sec=0.1)
+
+    def _close_executor(self) -> None:
+        self._spin_stop_event.set()
+
+        if self._spin_thread is not None:
+            self._spin_thread.join(timeout=1.0)
+            self._spin_thread = None
+
+        if self._executor is not None:
+            try:
+                self._executor.remove_node(self._node)
+            except Exception:  # noqa: BLE001
+                pass
+            self._executor.shutdown(timeout_sec=0.0)
+            self._executor = None
