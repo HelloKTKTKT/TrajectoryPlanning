@@ -130,64 +130,67 @@ class CrazyflieAgentProcess(Process):
             controller=None,
         )
 
-        if not self._wait_for_state(
-            state_provider=state_provider,
-            timeout_sec=self.wait_for_state_timeout,
-        ):
-            print(
-                "[CrazyflieAgentProcess] ERROR: no mocap state received within timeout.",
-                flush=True,
-            )
-            return
-
-        initial_state = state_provider.get_state()
-        if initial_state is not None:
-            print(
-                "[CrazyflieAgentProcess] initial position="
-                f"{initial_state.position}",
-                flush=True,
-            )
-
         try:
-            if self.arm_before_takeoff:
-                try:
-                    backend.arm(True)
-                    time.sleep(0.5)
-                except Exception as exc:  # noqa: BLE001
-                    print(
-                        "[CrazyflieAgentProcess] arm(True) failed (ignored): "
-                        f"{exc}",
-                        flush=True,
-                    )
+            if not self._wait_for_state(
+                state_provider=state_provider,
+                timeout_sec=self.wait_for_state_timeout,
+            ):
+                print(
+                    "[CrazyflieAgentProcess] ERROR: no mocap state received within timeout.",
+                    flush=True,
+                )
+                return
 
-            print(
-                f"[CrazyflieAgentProcess] takeoff to {self.takeoff_height:.2f} m",
-                flush=True,
-            )
-            backend.takeoff(
-                target_height=self.takeoff_height,
-                duration=self.takeoff_duration,
-            )
-            time.sleep(self.takeoff_duration + 0.5)
+            initial_state = state_provider.get_state()
+            if initial_state is not None:
+                print(
+                    "[CrazyflieAgentProcess] initial position="
+                    f"{initial_state.position}",
+                    flush=True,
+                )
 
-            self._run_execution_loop(agent=agent, backend=backend)
-
-        finally:
-            print("[CrazyflieAgentProcess] landing ...", flush=True)
             try:
-                backend.land()
-                time.sleep(self.landing_duration + 0.5)
-            finally:
-                if self.disarm_after_landing:
+                if self.arm_before_takeoff:
                     try:
-                        backend.arm(False)
+                        backend.arm(True)
+                        time.sleep(0.5)
                     except Exception as exc:  # noqa: BLE001
                         print(
-                            "[CrazyflieAgentProcess] arm(False) failed (ignored): "
+                            "[CrazyflieAgentProcess] arm(True) failed (ignored): "
                             f"{exc}",
                             flush=True,
                         )
-            print("[CrazyflieAgentProcess] exiting", flush=True)
+
+                print(
+                    f"[CrazyflieAgentProcess] takeoff to {self.takeoff_height:.2f} m",
+                    flush=True,
+                )
+                backend.takeoff(
+                    target_height=self.takeoff_height,
+                    duration=self.takeoff_duration,
+                )
+                time.sleep(self.takeoff_duration + 0.5)
+
+                self._run_execution_loop(agent=agent, backend=backend)
+
+            finally:
+                print("[CrazyflieAgentProcess] landing ...", flush=True)
+                try:
+                    backend.land()
+                    time.sleep(self.landing_duration + 0.5)
+                finally:
+                    if self.disarm_after_landing:
+                        try:
+                            backend.arm(False)
+                        except Exception as exc:  # noqa: BLE001
+                            print(
+                                "[CrazyflieAgentProcess] arm(False) failed (ignored): "
+                                f"{exc}",
+                                flush=True,
+                            )
+                print("[CrazyflieAgentProcess] exiting", flush=True)
+        finally:
+            state_provider.close()
 
     def _run_execution_loop(
         self,
