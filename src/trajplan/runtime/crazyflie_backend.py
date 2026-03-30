@@ -3,7 +3,6 @@ from __future__ import annotations
 import threading
 
 import numpy as np
-
 from trajplan.runtime.backend import CommonBackend
 from trajplan.shared_types import Vector
 
@@ -63,6 +62,7 @@ class CrazyflieBackend(CommonBackend):
         pos = pva[0:3]
         vel = pva[3:6]
         acc = pva[6:9]
+        print(f"pva: {pva}")
 
         self._cf.cmdFullState(
             pos,
@@ -98,7 +98,9 @@ class CrazyflieBackend(CommonBackend):
     ) -> None:
         self._cf.notifySetpointsStop()
         self._cf.land(
-            targetHeight=self._landing_height if target_height is None else float(target_height),
+            targetHeight=(
+                self._landing_height if target_height is None else float(target_height)
+            ),
             duration=self._landing_duration if duration is None else float(duration),
         )
 
@@ -117,7 +119,4 @@ class CrazyflieBackend(CommonBackend):
                 duration=duration,
             )
         except Exception as exc:  # noqa: BLE001
-            print(
-                "[CrazyflieBackend] emergency_land() failed "
-                f"(ignored): {exc}"
-            )
+            print("[CrazyflieBackend] emergency_land() failed " f"(ignored): {exc}")

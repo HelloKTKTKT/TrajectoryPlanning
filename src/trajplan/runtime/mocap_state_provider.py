@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import threading
-
 import numpy as np
-
 from trajplan.quadrotor.state import QuadrotorState
 from trajplan.runtime.state_provider import StateProvider
 
@@ -20,6 +17,10 @@ class MocapStateProvider(StateProvider):
     smoothing. When no odom message has arrived yet, velocity falls back to
     finite-differencing of position. Orientation and angular rate are set to
     zero because the Crazyflie execution path only requires pva.
+
+    The caller is responsible for spinning the ROS node so that callbacks are
+    delivered (e.g. via a background ``rclpy.executors.SingleThreadedExecutor``
+    thread).
     """
 
     def __init__(
@@ -36,27 +37,10 @@ class MocapStateProvider(StateProvider):
                 "geometry_msgs/nav_msgs are not available. "
                 "Make sure the ROS2 workspace is sourced."
             ) from exc
-        try:
-            import rclpy
-            from rclpy.executors import SingleThreadedExecutor
-        except ImportError as exc:
-            raise ImportError(
-                "rclpy is not available. Make sure the ROS2 workspace is sourced."
-            ) from exc
-        try:
-            import rclpy
-            from rclpy.executors import SingleThreadedExecutor
-        except ImportError as exc:
-            raise ImportError(
-                "rclpy is not available. Make sure the ROS2 workspace is sourced."
-            ) from exc
 
         self._node = node
         self._cf_name = str(cf_name)
         self._ema_alpha = float(ema_alpha)
-        self._executor = None
-        self._spin_stop_event = threading.Event()
-        self._spin_thread: threading.Thread | None = None
 
         if not (0.0 < self._ema_alpha <= 1.0):
             raise ValueError(
@@ -72,7 +56,6 @@ class MocapStateProvider(StateProvider):
         self._prev_stamp: float | None = None
         self._ekf_vel: np.ndarray | None = None
 
-        self._lock = threading.Lock()
         self._sub = node.create_subscription(
             PoseStamped,
             f"/{self._cf_name}/pose",
@@ -86,34 +69,11 @@ class MocapStateProvider(StateProvider):
             10,
         )
 
-        node_executor = getattr(node, "executor", None)
-        if node_executor is None:
-            self._executor = SingleThreadedExecutor()
-            self._executor.add_node(node)
-            self._spin_thread = threading.Thread(
-                target=self._spin_executor,
-                name=f"mocap-spin-{self._cf_name}",
-                daemon=True,
-            )
-            self._spin_thread.start()
-
-        node_executor = getattr(node, "executor", None)
-        if node_executor is None:
-            self._executor = SingleThreadedExecutor()
-            self._executor.add_node(node)
-            self._spin_thread = threading.Thread(
-                target=self._spin_executor,
-                name=f"mocap-spin-{self._cf_name}",
-                daemon=True,
-            )
-            self._spin_thread.start()
-
     def get_state(self) -> QuadrotorState | None:
         if not self._initialized:
             return None
 
-        with self._lock:
-            return self._state.copy()
+        return self._state.copy()
 
     def is_initialized(self) -> bool:
         return self._initialized
@@ -127,11 +87,7 @@ class MocapStateProvider(StateProvider):
             ],
             dtype=np.float64,
         )
-        with self._lock:
-            self._ekf_vel = vel
-
-    def close(self) -> None:
-        self._close_executor()
+        self._ekf_vel = vel
 
     def _pose_callback(self, msg) -> None:
         stamp_sec = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
@@ -144,66 +100,43 @@ class MocapStateProvider(StateProvider):
             dtype=np.float64,
         )
 
-        with self._lock:
-            if self._prev_pos is None or self._prev_stamp is None:
-                self._prev_pos = pos.copy()
-                self._prev_stamp = stamp_sec
-                self._state = QuadrotorState(
-                    pva=np.hstack((pos, np.zeros(6, dtype=np.float64))),
-                    euler=np.zeros(3, dtype=np.float64),
-                    angular_rate=np.zeros(3, dtype=np.float64),
-                )
-                self._initialized = True
-                return
-
-            dt = stamp_sec - self._prev_stamp
-            if dt <= 1e-9:
-                return
-
-            alpha = self._ema_alpha
-
-            if self._ekf_vel is not None:
-                # Use onboard EKF velocity directly; differentiate it for acceleration.
-                vel = self._ekf_vel
-                acc_raw = (vel - self._prev_vel) / dt
-                acc = alpha * acc_raw + (1.0 - alpha) * self._prev_acc
-            else:
-                # Fallback: finite-diff position until first odom arrives.
-                vel_raw = (pos - self._prev_pos) / dt
-                vel = alpha * vel_raw + (1.0 - alpha) * self._prev_vel
-                acc_raw = (vel - self._prev_vel) / dt
-                acc = alpha * acc_raw + (1.0 - alpha) * self._prev_acc
-
+        if self._prev_pos is None or self._prev_stamp is None:
+            self._prev_pos = pos.copy()
+            self._prev_stamp = stamp_sec
             self._state = QuadrotorState(
-                pva=np.hstack((pos, vel, acc)),
+                pva=np.hstack((pos, np.zeros(6, dtype=np.float64))),
                 euler=np.zeros(3, dtype=np.float64),
                 angular_rate=np.zeros(3, dtype=np.float64),
             )
-
-            self._prev_pos = pos.copy()
-            self._prev_vel = vel.copy()
-            self._prev_acc = acc.copy()
-            self._prev_stamp = stamp_sec
             self._initialized = True
-
-    def _spin_executor(self) -> None:
-        if self._executor is None:
             return
 
-        while not self._spin_stop_event.is_set():
-            self._executor.spin_once(timeout_sec=0.1)
+        dt = stamp_sec - self._prev_stamp
+        if dt <= 1e-9:
+            return
 
-    def _close_executor(self) -> None:
-        self._spin_stop_event.set()
+        alpha = self._ema_alpha
 
-        if self._spin_thread is not None:
-            self._spin_thread.join(timeout=1.0)
-            self._spin_thread = None
+        # if self._ekf_vel is not None:
+        #     # Use onboard EKF velocity directly; differentiate it for acceleration.
+        #     vel = self._ekf_vel
+        #     acc_raw = (vel - self._prev_vel) / dt
+        #     acc = alpha * acc_raw + (1.0 - alpha) * self._prev_acc
+        # else:
+        # Fallback: finite-diff position until first odom arrives.
+        vel_raw = (pos - self._prev_pos) / dt
+        vel = alpha * vel_raw + (1.0 - alpha) * self._prev_vel
+        acc_raw = (vel - self._prev_vel) / dt
+        acc = alpha * acc_raw + (1.0 - alpha) * self._prev_acc
 
-        if self._executor is not None:
-            try:
-                self._executor.remove_node(self._node)
-            except Exception:  # noqa: BLE001
-                pass
-            self._executor.shutdown(timeout_sec=0.0)
-            self._executor = None
+        self._state = QuadrotorState(
+            pva=np.hstack((pos, vel, acc)),
+            euler=np.zeros(3, dtype=np.float64),
+            angular_rate=np.zeros(3, dtype=np.float64),
+        )
+
+        self._prev_pos = pos.copy()
+        self._prev_vel = vel.copy()
+        self._prev_acc = acc.copy()
+        self._prev_stamp = stamp_sec
+        self._initialized = True

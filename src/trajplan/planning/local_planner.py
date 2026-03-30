@@ -3,12 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-
 from trajplan.map.grid_map import GridMap
 from trajplan.planning.bspline_optimizer import BsplineOptimizer
-
 from trajplan.quadrotor.command import QuadrotorCommand
-from trajplan.shared_types import Matrix, Vector, PvPair
+from trajplan.shared_types import Matrix, PvPair, Vector
 from trajplan.trajectory.bspline import UniformBSpline
 from trajplan.trajectory.polynomial import OneSegmentMinimumJerkTrajectory
 

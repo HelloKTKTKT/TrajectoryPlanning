@@ -1,13 +1,14 @@
 import time
 from multiprocessing import Process
-from multiprocessing.synchronize import (
-    Event as ProcessEvent,
-)  # note this is only for annotation, when creating event, use from multiprocessing import Event
+from multiprocessing.synchronize import \
+    Event as \
+    ProcessEvent  # note this is only for annotation, when creating event, use from multiprocessing import Event
+
 from trajplan.planning.messages import PlannerTickInput, PlannerTickOutput
-from trajplan.runtime.channels import PlannerManagerAgentQueues
 from trajplan.planning.planner_manager import PlannerManager
 from trajplan.quadrotor.command import QuadrotorMode
-from trajplan.runtime.ipc import put_latest, drain_latest
+from trajplan.runtime.channels import PlannerManagerAgentQueues
+from trajplan.runtime.ipc import drain_latest, put_latest
 
 
 class PlannerManagerProcess(Process):
@@ -40,7 +41,9 @@ class PlannerManagerProcess(Process):
     def run(self) -> None:
         last_plan_time: float | None = None
 
-        while not self.stop_event.is_set():  # when existing this while loop, this process will be not alive: planner_process.is_alive() == False
+        while (
+            not self.stop_event.is_set()
+        ):  # when existing this while loop, this process will be not alive: planner_process.is_alive() == False
             tick_input = drain_latest(self.planner_manager_agent_queues.agent_to_pm)
 
             if isinstance(tick_input, PlannerTickInput) and (

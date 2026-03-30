@@ -1,14 +1,14 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 
 import numpy as np
-
+from trajplan.map.grid_map import GridMap
 from trajplan.planning.local_planner import LocalPlanner
 from trajplan.quadrotor.command import QuadrotorCommand
 from trajplan.quadrotor.state import QuadrotorState
 from trajplan.shared_types import Vector
 from trajplan.trajectory.linear_mpc import LinearMpcConfig, LinearMpcTrajectory
-from trajplan.map.grid_map import GridMap
 
 
 @dataclass(slots=True)
@@ -104,7 +104,10 @@ class PlannerManager:
         goal_pv = np.hstack((self.active_goal_position, np.zeros(3, dtype=np.float64)))
         current_pv = current_state.pva[:6]
 
-        error_norm = np.linalg.norm(current_pv - goal_pv)
+        error_norm = np.linalg.norm(current_pv[:3] - goal_pv[:3])
+        # print(
+        #     f"error_norm: {error_norm}, curent p: {current_pv[:3]}, goal p: {goal_pv[:3]}"
+        # )
         return bool(error_norm <= self.config.goal_tol)
 
     # ------------------------------------------------------------------
@@ -167,7 +170,9 @@ class PlannerManager:
         ):
             return active_command.sample_pva(current_time)
 
-        return current_state.pva.copy()
+        pva = np.zeros(9)
+        pva[:3] = current_state.pva.copy()[:3]
+        return pva
 
     def _get_local_target_update_global_progress(
         self,

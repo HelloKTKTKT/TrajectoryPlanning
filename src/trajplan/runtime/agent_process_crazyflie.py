@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import threading
 import time
-from multiprocessing import Process
-from multiprocessing import Queue
+from multiprocessing import Process, Queue
 from multiprocessing.synchronize import Event as ProcessEvent
 
 from trajplan.planning.messages import PlannerTickInput, PlannerTickOutput
@@ -97,6 +97,7 @@ class CrazyflieAgentProcess(Process):
 
     def run(self) -> None:
         try:
+            import rclpy
             from crazyflie_py import Crazyswarm
         except ImportError as exc:
             raise ImportError(
@@ -113,6 +114,18 @@ class CrazyflieAgentProcess(Process):
             f"[CrazyflieAgentProcess] connected to {cf_name}",
             flush=True,
         )
+
+        # Spin the node in a background thread so that topic callbacks
+        # (pose, odom) are delivered continuously without blocking the
+        # main execution loop.
+        _spin_executor = rclpy.executors.SingleThreadedExecutor()
+        _spin_executor.add_node(ros_node)
+        _spin_thread = threading.Thread(
+            target=_spin_executor.spin,
+            daemon=True,
+            name="ros-spin",
+        )
+        _spin_thread.start()
 
         state_provider = MocapStateProvider(
             node=ros_node,
@@ -171,7 +184,9 @@ class CrazyflieAgentProcess(Process):
                 )
                 time.sleep(self.takeoff_duration + 0.5)
 
-                self._run_execution_loop(agent=agent, backend=backend)
+                self._run_execution_loop(
+                    agent=agent, backend=backend, state_provider=state_provider
+                )
 
             finally:
                 print("[CrazyflieAgentProcess] landing ...", flush=True)
@@ -190,12 +205,14 @@ class CrazyflieAgentProcess(Process):
                             )
                 print("[CrazyflieAgentProcess] exiting", flush=True)
         finally:
-            state_provider.close()
+            _spin_executor.shutdown(timeout_sec=1.0)
+            _spin_thread.join(timeout=1.0)
 
     def _run_execution_loop(
         self,
         agent: QuadrotorAgent,
         backend: CrazyflieBackend,
+        state_provider: MocapStateProvider,
     ) -> None:
         last_step_time: float | None = None
 
@@ -227,7 +244,7 @@ class CrazyflieAgentProcess(Process):
             last_step_time = now_time
 
             tick_input = PlannerTickInput(
-                state=agent.get_current_state(),
+                state=state_provider.get_state(),
                 timestamp=now_time,
                 active_command=agent.active_command,
             )
