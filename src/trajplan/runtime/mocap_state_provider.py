@@ -12,10 +12,14 @@ class MocapStateProvider(StateProvider):
     """
     State provider for a real Crazyflie using external motion capture.
 
-    It subscribes to ``/{cf_name}/pose`` (``geometry_msgs/PoseStamped``) and
-    estimates velocity and acceleration from position differences with EMA
-    smoothing. Orientation and angular rate are currently set to zero because
-    the Crazyflie execution path only requires pva.
+    Subscribes to ``/{cf_name}/pose`` (``geometry_msgs/PoseStamped``) for
+    position and ``/{cf_name}/odom`` (``nav_msgs/Odometry``) for velocity
+    from the drone's onboard EKF (``kalman.statePX/Y/Z``).
+
+    Acceleration is estimated by differentiating the EKF velocity with EMA
+    smoothing. When no odom message has arrived yet, velocity falls back to
+    finite-differencing of position. Orientation and angular rate are set to
+    zero because the Crazyflie execution path only requires pva.
     """
 
     def __init__(
@@ -26,9 +30,11 @@ class MocapStateProvider(StateProvider):
     ) -> None:
         try:
             from geometry_msgs.msg import PoseStamped
+            from nav_msgs.msg import Odometry
         except ImportError as exc:
             raise ImportError(
-                "geometry_msgs is not available. Make sure the ROS2 workspace is sourced."
+                "geometry_msgs/nav_msgs are not available. "
+                "Make sure the ROS2 workspace is sourced."
             ) from exc
 
         self._node = node
@@ -47,12 +53,19 @@ class MocapStateProvider(StateProvider):
         self._prev_vel = np.zeros(3, dtype=np.float64)
         self._prev_acc = np.zeros(3, dtype=np.float64)
         self._prev_stamp: float | None = None
+        self._ekf_vel: np.ndarray | None = None
 
         self._lock = threading.Lock()
         self._sub = node.create_subscription(
             PoseStamped,
             f"/{self._cf_name}/pose",
             self._pose_callback,
+            10,
+        )
+        self._odom_sub = node.create_subscription(
+            Odometry,
+            f"/{self._cf_name}/odom",
+            self._odom_callback,
             10,
         )
 
@@ -65,6 +78,18 @@ class MocapStateProvider(StateProvider):
 
     def is_initialized(self) -> bool:
         return self._initialized
+
+    def _odom_callback(self, msg) -> None:
+        vel = np.array(
+            [
+                msg.twist.twist.linear.x,
+                msg.twist.twist.linear.y,
+                msg.twist.twist.linear.z,
+            ],
+            dtype=np.float64,
+        )
+        with self._lock:
+            self._ekf_vel = vel
 
     def _pose_callback(self, msg) -> None:
         stamp_sec = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
@@ -95,20 +120,26 @@ class MocapStateProvider(StateProvider):
 
             alpha = self._ema_alpha
 
-            vel_raw = (pos - self._prev_pos) / dt
-            vel_filtered = alpha * vel_raw + (1.0 - alpha) * self._prev_vel
-
-            acc_raw = (vel_filtered - self._prev_vel) / dt
-            acc_filtered = alpha * acc_raw + (1.0 - alpha) * self._prev_acc
+            if self._ekf_vel is not None:
+                # Use onboard EKF velocity directly; differentiate it for acceleration.
+                vel = self._ekf_vel
+                acc_raw = (vel - self._prev_vel) / dt
+                acc = alpha * acc_raw + (1.0 - alpha) * self._prev_acc
+            else:
+                # Fallback: finite-diff position until first odom arrives.
+                vel_raw = (pos - self._prev_pos) / dt
+                vel = alpha * vel_raw + (1.0 - alpha) * self._prev_vel
+                acc_raw = (vel - self._prev_vel) / dt
+                acc = alpha * acc_raw + (1.0 - alpha) * self._prev_acc
 
             self._state = QuadrotorState(
-                pva=np.hstack((pos, vel_filtered, acc_filtered)),
+                pva=np.hstack((pos, vel, acc)),
                 euler=np.zeros(3, dtype=np.float64),
                 angular_rate=np.zeros(3, dtype=np.float64),
             )
 
             self._prev_pos = pos.copy()
-            self._prev_vel = vel_filtered.copy()
-            self._prev_acc = acc_filtered.copy()
+            self._prev_vel = vel.copy()
+            self._prev_acc = acc.copy()
             self._prev_stamp = stamp_sec
             self._initialized = True
