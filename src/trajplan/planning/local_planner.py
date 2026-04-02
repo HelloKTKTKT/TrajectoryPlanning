@@ -293,9 +293,13 @@ class LocalPlanner:
 
         # 2. Check if extension is needed
         local_end = old_bspline.evaluate_pva(old_bspline.duration)
-        poly_time = np.linalg.norm(
-            local_end[:3] - np.asarray(local_target_pva[:3], dtype=np.float64)
-        ) / (self.config.max_vel**2)
+        poly_time = (
+            np.linalg.norm(
+                local_end[:3] - np.asarray(local_target_pva[:3], dtype=np.float64)
+            )
+            / (self.config.max_vel)
+            * 2
+        )
 
         if poly_time > self.ts_check:
             try:

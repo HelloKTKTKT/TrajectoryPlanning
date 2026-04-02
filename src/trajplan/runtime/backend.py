@@ -4,9 +4,9 @@ from trajplan.shared_types import Vector
 
 
 class CommonBackend:
-    def send_reference_pva(
+    def send_reference_pvaj(
         self,
-        pva: Vector,
+        pvaj: Vector,
     ) -> None:
         raise NotImplementedError
 

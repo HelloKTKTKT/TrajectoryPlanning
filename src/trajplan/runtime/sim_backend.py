@@ -64,12 +64,12 @@ class SimBackend(CommonBackend):
                 f"but got {self.min_rotor_thrust} > {self.physical_config.max_force}."
             )
 
-    def send_reference_pva(
+    def send_reference_pvaj(
         self,
-        pva: Vector,
+        pvaj: Vector,
     ) -> None:
         raise NotImplementedError(
-            "SimBackend does not use send_reference_pva() in the current design. "
+            "SimBackend does not use send_reference_pvaj() in the current design. "
             "Use apply_control(rotor_thrust, dt) instead."
         )
 

@@ -54,6 +54,15 @@ class BsplineOptimizer:
         end_index = initial_bspline.num_control_points - 3
         ctp_var = initial_bspline.control_points.copy()
         x0 = ctp_var[start_index:end_index].flatten()
+
+        # Create bounds: minimum altitude of 0.5m for Z coordinate
+        num_points = end_index - start_index
+        bounds = []
+        for i in range(num_points):
+            bounds.append((-np.inf, np.inf))  # X: no constraint
+            bounds.append((-np.inf, np.inf))  # Y: no constraint
+            bounds.append((0.5, np.inf))      # Z: minimum 0.5m altitude
+
         param = {
             "ctps_opt": ctp_var,
             "pv_pair_info": pv_pair_info,
@@ -66,6 +75,7 @@ class BsplineOptimizer:
             method="L-BFGS-B",
             jac=True,
             args=(param,),
+            bounds=bounds,
             tol=self.config.tol,
         )
 

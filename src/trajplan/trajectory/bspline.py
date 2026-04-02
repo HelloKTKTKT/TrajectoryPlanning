@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import numpy as np
 from trajplan.shared_types import Matrix, Vector
 from trajplan.utils import as_matrix, clamp
@@ -243,6 +244,30 @@ class UniformBSpline:
         acceleration = basis_a @ (self.A_MATRIX_BASE / (self.delta_t**2)) @ local_cp
 
         return np.hstack((position, velocity, acceleration)).reshape(-1)
+
+    def evaluate_pvaj(self, t: float) -> Vector:
+        """
+        Evaluate and concatenate position, velocity, acceleration, jerk.
+
+        Returns
+        -------
+        Vector
+            Concatenated vector [p, v, a, j] with shape (12,).
+        """
+        segment_index, u = self._get_segment_index_and_u(t)
+        local_cp = self.control_points[segment_index : segment_index + 4]
+
+        basis_p = np.array([[1.0, u, u**2, u**3]], dtype=np.float64)
+        basis_v = np.array([[1.0, u, u**2]], dtype=np.float64)
+        basis_a = np.array([[1.0, u]], dtype=np.float64)
+        basis_j = np.array([[1.0]], dtype=np.float64)
+
+        position = basis_p @ self.P_MATRIX @ local_cp
+        velocity = basis_v @ (self.V_MATRIX_BASE / self.delta_t) @ local_cp
+        acceleration = basis_a @ (self.A_MATRIX_BASE / (self.delta_t**2)) @ local_cp
+        jerk = basis_j @ (self.J_MATRIX_BASE / (self.delta_t**3)) @ local_cp
+
+        return np.hstack((position, velocity, acceleration, jerk)).reshape(-1)
 
     def check_feasibility(
         self,

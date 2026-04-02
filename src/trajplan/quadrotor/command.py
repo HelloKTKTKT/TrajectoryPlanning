@@ -104,3 +104,12 @@ class QuadrotorCommand:
 
         elapsed_time = self.get_elapsed_time(now_time)
         return self.trajectory.evaluate_pva(elapsed_time)
+
+    def sample_pvaj(self, now_time: float) -> Vector:
+        if not self.is_track:
+            raise ValueError("sample_pvaj is only valid when mode is TRACK.")
+        if self.trajectory is None:
+            raise ValueError("trajectory must not be None when mode is TRACK.")
+
+        elapsed_time = self.get_elapsed_time(now_time)
+        return self.trajectory.evaluate_pvaj(elapsed_time)

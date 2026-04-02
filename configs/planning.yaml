@@ -16,8 +16,8 @@ global_linear_mpc:
   r_jerk: [0.1, 0.1, 0.1]
 
 local_planner:
-  ctrl_pt_dist: 0.35
-  planning_horizon: 5.0
+  ctrl_pt_dist: 0.4
+  planning_horizon: 10.0
   collision_weight_increase_factor: 2.0
   max_restart_num: 3
 

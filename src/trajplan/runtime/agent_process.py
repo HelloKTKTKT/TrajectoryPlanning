@@ -90,9 +90,9 @@ class AgentProcess(Process):
             if self.state_log_queue is not None and tick_input.state is not None:
                 self.state_log_queue.put(tick_input.state.copy())
             if self.reference_log_queue is not None:
-                current_reference_pva = self.agent.get_current_reference_pva()
-                if current_reference_pva is not None:
-                    self.reference_log_queue.put(current_reference_pva.copy())
+                current_reference_pvaj = self.agent.get_current_reference_pvaj()
+                if current_reference_pvaj is not None:
+                    self.reference_log_queue.put(current_reference_pvaj.copy())
 
             if self.agent.is_finished:
                 print(

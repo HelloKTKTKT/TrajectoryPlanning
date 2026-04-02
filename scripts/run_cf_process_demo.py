@@ -50,10 +50,10 @@ def build_grid_map(planning_cfg: dict[str, Any]) -> GridMap:
     size = np.asarray(planning_cfg["grid_map"]["map_size"], dtype=np.int64)
     grid_map = GridMap(resolution=resolution, origin=origin, map_size=size)
 
-    grid_map.add_obstacle(
-        obs_start_index=np.array([4, 11, 0], dtype=np.int64),
-        obs_size=np.array([22, 11, 20], dtype=np.int64),
-    )
+    # grid_map.add_obstacle(
+    #     obs_start_index=np.array([4, 11, 0], dtype=np.int64),
+    #     obs_size=np.array([22, 11, 20], dtype=np.int64),
+    # )
     # grid_map.add_obstacle(
     #     obs_start_index=np.array([20, 10, 0], dtype=np.int64),
     #     obs_size=np.array([20, 10, 30], dtype=np.int64),
@@ -89,8 +89,8 @@ def main() -> None:
         grid_map=grid_map,
         config=build_planner_manager_config(planning_cfg),
     )
-    planner_manager.add_goal(np.array([0.0, 1.2, 1.5], dtype=np.float64))
-    # planner_manager.add_goal(np.array([-1.2, 1.2, 1.0], dtype=np.float64))
+    # planner_manager.add_goal(np.array([1.2, -1.2, 1.5], dtype=np.float64))
+    planner_manager.add_goal(np.array([-1.2, 1.2, 1.5], dtype=np.float64))
 
     planner_manager_agent_queues = PlannerManagerAgentQueues(
         pm_to_agent=Queue(maxsize=1),
@@ -101,10 +101,10 @@ def main() -> None:
     planner_stop_event = Event()
     agent_stop_event = Event()
 
-    planning_interval = 1.5
-    execution_interval = 1.0 / 30.0
+    planning_interval = 10.0
+    execution_interval = 1.0 / 100.0
     idle_sleep_time = 0.005
-    max_runtime = 15.0
+    max_runtime = 30.0
 
     planner_process = PlannerManagerProcess(
         planner_manager_agent_queues=planner_manager_agent_queues,

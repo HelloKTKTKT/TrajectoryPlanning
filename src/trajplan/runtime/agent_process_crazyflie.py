@@ -241,6 +241,9 @@ class CrazyflieAgentProcess(Process):
                 dt=self.execution_interval,
                 now_time=now_time,
             )
+            if last_step_time is not None:
+                elapsed = now_time - last_step_time
+                print(f"elapsed: {elapsed}, now {now_time}")
             last_step_time = now_time
 
             tick_input = PlannerTickInput(
@@ -253,9 +256,9 @@ class CrazyflieAgentProcess(Process):
             if self.state_log_queue is not None and tick_input.state is not None:
                 self.state_log_queue.put(tick_input.state.copy())
             if self.reference_log_queue is not None:
-                current_reference_pva = agent.get_current_reference_pva()
-                if current_reference_pva is not None:
-                    self.reference_log_queue.put(current_reference_pva.copy())
+                current_reference_pvaj = agent.get_current_reference_pvaj()
+                if current_reference_pvaj is not None:
+                    self.reference_log_queue.put(current_reference_pvaj.copy())
 
             if backend.emergency_triggered:
                 print(

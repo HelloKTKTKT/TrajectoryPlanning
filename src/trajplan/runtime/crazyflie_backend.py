@@ -23,17 +23,11 @@ class CrazyflieBackend(CommonBackend):
         self,
         cf,
         default_yaw: float = 0.0,
-        default_omega: Vector | None = None,
         landing_height: float = 0.04,
         landing_duration: float = 2.0,
     ) -> None:
         self._cf = cf
         self._default_yaw = float(default_yaw)
-        self._default_omega = (
-            np.zeros(3, dtype=np.float64)
-            if default_omega is None
-            else np.asarray(default_omega, dtype=np.float64).reshape(3)
-        )
         self._landing_height = float(landing_height)
         self._landing_duration = float(landing_duration)
         self._emergency_land_event = threading.Event()
@@ -51,25 +45,58 @@ class CrazyflieBackend(CommonBackend):
     def emergency_triggered(self) -> bool:
         return self._emergency_land_event.is_set()
 
-    def send_reference_pva(
+    def _calculate_omega(
         self,
-        pva: Vector,
-    ) -> None:
-        pva = np.asarray(pva, dtype=np.float64).reshape(-1)
-        if pva.shape != (9,):
-            raise ValueError(f"Expected pva shape (9,), but got {pva.shape}.")
+        acc: np.ndarray,
+        jerk: np.ndarray,
+    ) -> np.ndarray:
+        thrust = acc + np.array([0.0, 0.0, 9.81], dtype=np.float64)
+        thrust_norm = np.linalg.norm(thrust)
+        if thrust_norm < 1e-6:
+            return np.zeros(3, dtype=np.float64)
 
-        pos = pva[0:3]
-        vel = pva[3:6]
-        acc = pva[6:9]
-        print(f"pva: {pva}")
+        z_body = thrust / thrust_norm
+        yaw = self._default_yaw
+        x_world = np.array([np.cos(yaw), np.sin(yaw), 0.0], dtype=np.float64)
+
+        y_body_unnorm = np.cross(z_body, x_world)
+        y_body_norm = np.linalg.norm(y_body_unnorm)
+        if y_body_norm < 1e-6:
+            y_body = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+        else:
+            y_body = y_body_unnorm / y_body_norm
+
+        x_body = np.cross(y_body, z_body)
+
+        jerk_orth = jerk - np.dot(jerk, z_body) * z_body
+        h_w = jerk_orth / thrust_norm
+
+        return np.array(
+            [-np.dot(h_w, y_body), np.dot(h_w, x_body), 0.0],
+            dtype=np.float64,
+        )
+
+    def send_reference_pvaj(
+        self,
+        pvaj: Vector,
+    ) -> None:
+        pvaj = np.asarray(pvaj, dtype=np.float64).reshape(-1)
+        if pvaj.shape != (12,):
+            raise ValueError(f"Expected pvaj shape (12,), but got {pvaj.shape}.")
+
+        pos = pvaj[0:3]
+        vel = pvaj[3:6]
+        acc = pvaj[6:9]
+        jerk = pvaj[9:12]
+
+        omega = self._calculate_omega(acc, jerk)
 
         self._cf.cmdFullState(
             pos,
             vel,
             acc,
             self._default_yaw,
-            self._default_omega,
+            omega,
         )
 
     def stop(self) -> None:
