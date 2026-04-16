@@ -9,7 +9,7 @@ planner:
   no_replan_thresh: 0.5
   safety_check_interval: 0.05
   safety_sample_dt: 0.01
-  emergency_time: 1.0
+  emergency_time: 0.2
   emergency_vel_threshold: 0.1
   emergency_stop_duration: 2.0
   pm_process_planning_interval: 0.05
@@ -26,12 +26,9 @@ bspline_optimizer:
 grid_map:
   resolution: 0.1
   map_size: [30, 35, 20]
-  origin: [0.0, 0.0, 0.0]
+  origin: [-1.5, -1.5, 0.0]
   obstacles:
-    - obs_start_index: [5, 8, 0]
-      obs_size: [5, 5, 20]
-    - obs_start_index: [20, 20, 0]
-      obs_size: [6, 6, 20]
-
-
-
+    - obs_start_index: [10, 13, 0]
+      obs_size: [10, 4, 20]
+    # - obs_start_index: [20, 20, 0]
+    #   obs_size: [6, 6, 20]

@@ -6,7 +6,6 @@ import time
 from multiprocessing import Event, Queue
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
@@ -14,9 +13,11 @@ if str(SRC_ROOT) not in sys.path:
 
 
 from trajplan.config import load_project_configs  # noqa: E402
-from trajplan.runtime.agent_process_crazyflie import CrazyflieAgentProcess  # noqa: E402
+from trajplan.runtime.agent_process_crazyflie import \
+    CrazyflieAgentProcess  # noqa: E402
 from trajplan.runtime.channels import PlannerManagerAgentQueues  # noqa: E402
-from trajplan.runtime.planner_manager_process import PlannerManagerProcess  # noqa: E402
+from trajplan.runtime.planner_manager_process import \
+    PlannerManagerProcess  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -24,10 +25,10 @@ def parse_args() -> argparse.Namespace:
         description="Run PlannerManagerProcess with CrazyflieAgentProcess."
     )
     parser.add_argument("--cf-index", type=int, default=0)
-    parser.add_argument("--max-runtime", type=float, default=60.0)
+    parser.add_argument("--max-runtime", type=float, default=30.0)
     parser.add_argument("--execution-interval", type=float, default=0.01)
     parser.add_argument("--ema-alpha", type=float, default=0.3)
-    parser.add_argument("--takeoff-height", type=float, default=0.6)
+    parser.add_argument("--takeoff-height", type=float, default=1.0)
     parser.add_argument("--takeoff-duration", type=float, default=None)
     parser.add_argument("--landing-height", type=float, default=0.04)
     parser.add_argument("--landing-duration", type=float, default=2.0)

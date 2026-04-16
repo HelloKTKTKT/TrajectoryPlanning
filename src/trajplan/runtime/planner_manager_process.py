@@ -1,24 +1,21 @@
 import time
-from typing import Any
-import numpy as np
 from multiprocessing import Process
-from multiprocessing.synchronize import (
-    Event as ProcessEvent,
-)  # note this is only for annotation, when creating event, use from multiprocessing import Event
-from trajplan.planning.messages import PlannerTickInput, PlannerTickOutput
-from trajplan.runtime.channels import PlannerManagerAgentQueues
-from trajplan.planning.planner_manager import PlannerManager
-from trajplan.runtime.ipc import put_latest, drain_latest
+from multiprocessing.synchronize import \
+    Event as \
+    ProcessEvent  # note this is only for annotation, when creating event, use from multiprocessing import Event
+from typing import Any
 
+import numpy as np
+from trajplan.config import (build_bspline_optimizer_config,
+                             build_grid_map_config, build_local_planner_config,
+                             build_planner_manager_config)
 from trajplan.map.grid_map import GridMap
-from trajplan.config import (
-    build_grid_map_config,
-    build_bspline_optimizer_config,
-    build_local_planner_config,
-    build_planner_manager_config,
-)
 from trajplan.planning.bspline_optimizer import BsplineOptimizer
 from trajplan.planning.local_planner import LocalPlanner
+from trajplan.planning.messages import PlannerTickInput, PlannerTickOutput
+from trajplan.planning.planner_manager import PlannerManager
+from trajplan.runtime.channels import PlannerManagerAgentQueues
+from trajplan.runtime.ipc import drain_latest, put_latest
 
 
 class PlannerManagerProcess(Process):
@@ -63,9 +60,11 @@ class PlannerManagerProcess(Process):
             config=planner_manager_config,
             grid_map=grid_map,
         )
-        self.planner_manager.add_goal(
-            np.array([1.3, 3.0, 0.5], dtype=np.float64)
-        )
+        self.planner_manager.add_goal(np.array([0.0, -1.2, 1.5], dtype=np.float64))
+        self.planner_manager.add_goal(np.array([0.0, 1.5, 1.0], dtype=np.float64))
+        self.planner_manager.add_goal(np.array([1.2, -1.2, 1.2], dtype=np.float64))
+        self.planner_manager.add_goal(np.array([-1.2, 1.2, 0.8], dtype=np.float64))
+        # self.planner_manager.add_goal(np.array([0.0, -1.2, 0.5], dtype=np.float64))
 
         while not self.stop_event.is_set():
             tick_input = drain_latest(self.planner_manager_agent_queues.agent_to_pm)
