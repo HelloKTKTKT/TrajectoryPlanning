@@ -1,0 +1,37 @@
+planner:
+  goal_tolerance: 0.2
+  ctrl_pt_dist: 0.4
+  planning_horizon: 5.0
+  collision_weight_increase_factor: 2.0
+  max_restart_num: 3
+  global_interpoint_dist_thresh: 4.0
+  replan_thresh: 1.5
+  no_replan_thresh: 0.5
+  safety_check_interval: 0.05
+  safety_sample_dt: 0.01
+  emergency_time: 1.0
+  emergency_vel_threshold: 0.1
+  emergency_stop_duration: 2.0
+  pm_process_planning_interval: 0.05
+  pm_process_idle_sleep_time: 0.01
+
+bspline_optimizer:
+  lambda_smooth: 1.0
+  lambda_dist: 1.0
+  lambda_feasibility: 0.5
+  lambda_fitness: 1.0
+  tol: 1.0e-5
+  safe_dist: 0.5
+
+grid_map:
+  resolution: 0.1
+  map_size: [30, 35, 20]
+  origin: [0.0, 0.0, 0.0]
+  obstacles:
+    - obs_start_index: [5, 8, 0]
+      obs_size: [5, 5, 20]
+    - obs_start_index: [20, 20, 0]
+      obs_size: [6, 6, 20]
+
+
+

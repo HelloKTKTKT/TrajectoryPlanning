@@ -1,0 +1,46 @@
+physical:
+  rotor_count: 4
+
+  mass: 1.0
+  arm_length: 0.2275
+  motor_weight: 0.055
+
+  body_box_size: [0.18, 0.11, 0.04]
+  body_real_z: 0.025
+  align_angle_rad: 0.7853981633974483   # pi / 4
+
+  air_density: 1.225
+  propeller_diameter: 0.2286
+
+  thrust_coefficient: 0.109919
+  power_coefficient: 0.040164
+
+  max_rpm: 6396.667
+
+limits:
+  max_velocity_3d: [2.0, 2.0, 2.0]
+  max_acceleration_3d: [2.0, 2.0, 1.5]
+  max_jerk_3d: [4.0, 4.0, 3.0]
+
+controller:
+  differential_flatness:
+    kp: [5.0, 5.0, 5.0]
+    kv: [3.0, 3.0, 3.0]
+    ka: [1.0, 1.0, 1.0]
+    kvi: [0.0, 0.0, 0.0]
+
+    kq: [250.0, 250.0, 5.0]
+    kw: [20.0, 20.0, 10.0]
+
+    ep_max: 2.0
+    ev_max: 2.0
+    bw_max: [18.0, 18.0, 3.0]
+    sat_int_ev: 0.5
+
+    minimum_thrust: 0.01
+    maximum_thrust: 16.0
+    epsilon: 1.0e-3
+
+    qp_weight: [0.001, 10.0, 10.0, 0.1]
+    rotor_force_min: 0.01
+    rotor_force_max_scale: 0.99
