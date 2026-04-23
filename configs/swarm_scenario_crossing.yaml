@@ -1,0 +1,44 @@
+agents:
+  - agent_id: 0
+    initial_position: [1.0, 1.0, 1.05]
+    goal_positions:
+      - [9.0, 9.0, 1.0]
+
+  - agent_id: 1
+    initial_position: [9.0, 9.0, 1.1]
+    goal_positions:
+      - [1.0, 1.0, 1.0]
+
+  - agent_id: 2
+    initial_position: [1.0, 9.0, 0.95]
+    goal_positions:
+      - [9.0, 1.0, 1.0]
+
+  - agent_id: 3
+    initial_position: [9.0, 1.0, 0.9]
+    goal_positions:
+      - [1.0, 9.0, 1.0]
+
+  # - agent_id: 4
+  #   initial_position: [1.0, 5.5, 1.0]
+  #   goal_positions:
+  #     - [9.0, 5.5, 1.0]
+
+  # - agent_id: 5
+  #   initial_position: [9.0, 5.5, 1.0]
+  #   goal_positions:
+  #     - [1.0, 5.5, 1.0]
+
+  # - agent_id: 6
+  #   initial_position: [5.0, 1.0, 1.0]
+  #   goal_positions:
+  #     - [5.0, 9.0, 1.0]
+
+  # - agent_id: 7
+  #   initial_position: [5.0, 9.0, 1.0]
+  #   goal_positions:
+  #     - [5.0, 1.0, 1.0]
+
+
+
+
