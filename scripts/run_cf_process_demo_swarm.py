@@ -72,6 +72,10 @@ def _resolve_cf_indices(
     return resolved_cf_indices
 
 
+def _compute_agent_shutdown_timeout(landing_duration: float) -> float:
+    return max(float(landing_duration) + 3.0, 7.0)
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run PlannerManagerProcess with multiple CrazyflieAgentProcess workers."
@@ -123,6 +127,9 @@ def main() -> None:
         float(args.execution_interval)
         if args.execution_interval is not None
         else float(planning_cfg["planner"]["agent_process_control_interval"])
+    )
+    agent_shutdown_timeout = _compute_agent_shutdown_timeout(
+        landing_duration=float(args.landing_duration),
     )
     agent_idle_sleep_time = float(
         planning_cfg["planner"]["agent_process_idle_sleep_time"]
@@ -275,10 +282,10 @@ def main() -> None:
                 process.join(timeout=5.0)
 
         for process in agent_processes.values():
-            process.join(timeout=5.0)
+            process.join(timeout=agent_shutdown_timeout)
             if process.is_alive():
                 process.terminate()
-                process.join(timeout=5.0)
+                process.join(timeout=agent_shutdown_timeout)
 
     elapsed = time.monotonic() - start_time
     planner_exitcodes = {
