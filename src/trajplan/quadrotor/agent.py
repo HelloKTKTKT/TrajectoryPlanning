@@ -2,7 +2,6 @@ from __future__ import annotations
 import numpy as np
 
 from trajplan.runtime.backend import CommonBackend
-from trajplan.runtime.rk4_simulator.state_provider import SimStateProvider
 from trajplan.runtime.state_provider import StateProvider
 from trajplan.quadrotor.command import QuadrotorCommand
 from trajplan.quadrotor.state import QuadrotorState
@@ -90,7 +89,6 @@ class QuadrotorAgent:
             self.is_finished = True
             self._clear_hover_reference()
             self.current_reference_pva = None
-            self.backend.stop()
             return
 
         elif command.is_hover:
@@ -148,11 +146,13 @@ class QuadrotorAgent:
         )
 
         if next_state is not None:
-            if not isinstance(self.state_provider, SimStateProvider):
+            state_setter = getattr(self.state_provider, "set_state", None)
+            if not callable(state_setter):
                 raise RuntimeError(
-                    "Backend returned a simulated state, but state_provider is not SimStateProvider."
+                    "Backend returned a simulated state, but state_provider does not "
+                    "support set_state()."
                 )
-            self.state_provider.set_state(next_state)
+            state_setter(next_state)
 
     @staticmethod
     def _build_hover_reference(

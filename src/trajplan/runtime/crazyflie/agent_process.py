@@ -10,8 +10,8 @@ from trajplan.planning.messages import PlannerTickInput, PlannerTickOutput
 from trajplan.quadrotor.agent import QuadrotorAgent
 from trajplan.runtime.channels import PlannerManagerAgentQueues
 from trajplan.runtime.crazyflie.backend import CrazyflieBackend
-from trajplan.runtime.ipc import drain_latest, put_latest
 from trajplan.runtime.crazyflie.state_provider import MocapStateProvider
+from trajplan.runtime.ipc import drain_latest, put_latest
 from trajplan.visualization.messages import AgentVisualizationSnapshot
 
 
@@ -61,6 +61,9 @@ class CrazyflieAgentProcess(Process):
         self.arm_before_takeoff = bool(arm_before_takeoff)
         self.disarm_after_landing = bool(disarm_after_landing)
         self.visualization_queue = visualization_queue
+        self._log_prefix = (
+            f"[CrazyflieAgentProcess agent={self.agent_id} cf_index={self.cf_index}]"
+        )
 
         if self.execution_interval <= 0.0:
             raise ValueError(
@@ -112,7 +115,7 @@ class CrazyflieAgentProcess(Process):
         ros_node = cf.node
 
         print(
-            f"[CrazyflieAgentProcess] connected to {cf_name}",
+            f"{self._log_prefix} connected to {cf_name}",
             flush=True,
         )
 
@@ -148,15 +151,14 @@ class CrazyflieAgentProcess(Process):
                 timeout_sec=self.wait_for_state_timeout,
             ):
                 print(
-                    "[CrazyflieAgentProcess] ERROR: no mocap state received within timeout.",
+                    f"{self._log_prefix} ERROR: no mocap state received within timeout.",
                     flush=True,
                 )
                 return
 
             initial_state = state_provider.get_state()
             print(
-                "[CrazyflieAgentProcess] initial position="
-                f"{initial_state.position}",
+                f"{self._log_prefix} initial position={initial_state.position}",
                 flush=True,
             )
 
@@ -167,13 +169,12 @@ class CrazyflieAgentProcess(Process):
                         time.sleep(0.5)
                     except Exception as exc:  # noqa: BLE001
                         print(
-                            "[CrazyflieAgentProcess] arm(True) failed (ignored): "
-                            f"{exc}",
+                            f"{self._log_prefix} arm(True) failed (ignored): {exc}",
                             flush=True,
                         )
 
                 print(
-                    f"[CrazyflieAgentProcess] takeoff to {self.takeoff_height:.2f} m",
+                    f"{self._log_prefix} takeoff to {self.takeoff_height:.2f} m",
                     flush=True,
                 )
                 backend.takeoff(
@@ -189,21 +190,37 @@ class CrazyflieAgentProcess(Process):
                 )
 
             finally:
-                print("[CrazyflieAgentProcess] landing ...", flush=True)
+                print(f"{self._log_prefix} landing ...", flush=True)
+                landing_confirmed = False
+                landing_wait_timeout = max(self.landing_duration + 2.0, 5.0)
                 try:
                     backend.land()
-                    time.sleep(self.landing_duration + 0.5)
+                    landing_confirmed = self._wait_for_landing_completion(
+                        state_provider=state_provider,
+                        timeout_sec=landing_wait_timeout,
+                    )
+                    if not landing_confirmed:
+                        print(
+                            f"{self._log_prefix} landing state was not confirmed within "
+                            f"{landing_wait_timeout:.2f}s.",
+                            flush=True,
+                        )
                 finally:
-                    if self.disarm_after_landing:
+                    if self.disarm_after_landing and landing_confirmed:
                         try:
                             backend.arm(False)
                         except Exception as exc:  # noqa: BLE001
                             print(
-                                "[CrazyflieAgentProcess] arm(False) failed (ignored): "
-                                f"{exc}",
+                                f"{self._log_prefix} arm(False) failed (ignored): {exc}",
                                 flush=True,
                             )
-                print("[CrazyflieAgentProcess] exiting", flush=True)
+                    elif self.disarm_after_landing:
+                        print(
+                            f"{self._log_prefix} automatic disarm skipped because landing "
+                            "could not be confirmed.",
+                            flush=True,
+                        )
+                print(f"{self._log_prefix} exiting", flush=True)
         finally:
             spin_executor.shutdown(timeout_sec=1.0)
             spin_thread.join(timeout=1.0)
@@ -221,7 +238,7 @@ class CrazyflieAgentProcess(Process):
             if isinstance(tick_output, PlannerTickOutput):
                 agent.try_commit_command(tick_output.command)
                 print(
-                    "[CrazyflieAgentProcess] "
+                    f"{self._log_prefix} "
                     f"received command={tick_output.command.mode}, "
                     f"message={tick_output.command.message}",
                     flush=True,
@@ -264,13 +281,11 @@ class CrazyflieAgentProcess(Process):
 
             if backend.emergency_triggered:
                 print(
-                    "[CrazyflieAgentProcess] backend requested emergency stop",
+                    f"{self._log_prefix} backend requested emergency stop",
                     flush=True,
                 )
                 self.stop_event.set()
                 break
-
-        backend.stop()
 
     def _wait_for_state(
         self,
@@ -284,6 +299,43 @@ class CrazyflieAgentProcess(Process):
             if time.monotonic() - start_time > timeout_sec:
                 return False
             time.sleep(self.idle_sleep_time)
+        return False
+
+    def _wait_for_landing_completion(
+        self,
+        state_provider: MocapStateProvider,
+        timeout_sec: float,
+    ) -> bool:
+        start_time = time.monotonic()
+        settled_sample_count = 0
+        target_height = self.landing_height + 0.05
+        vertical_speed_tolerance = 0.15
+
+        while time.monotonic() - start_time <= timeout_sec:
+            if not state_provider.is_initialized():
+                time.sleep(self.idle_sleep_time)
+                continue
+
+            try:
+                current_state = state_provider.get_state()
+            except RuntimeError:
+                time.sleep(self.idle_sleep_time)
+                continue
+
+            current_height = float(current_state.position[2])
+            vertical_speed = abs(float(current_state.velocity[2]))
+            if (
+                current_height <= target_height
+                and vertical_speed <= vertical_speed_tolerance
+            ):
+                settled_sample_count += 1
+                if settled_sample_count >= 3:
+                    return True
+            else:
+                settled_sample_count = 0
+
+            time.sleep(self.idle_sleep_time)
+
         return False
 
     def _publish_visualization_snapshot(

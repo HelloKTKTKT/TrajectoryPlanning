@@ -26,6 +26,10 @@ from trajplan.runtime.planner_manager_process import PlannerManagerProcess  # no
 from trajplan.visualization.live_visualizer import LiveVisualizer  # noqa: E402
 
 
+def _compute_agent_shutdown_timeout(landing_duration: float) -> float:
+    return max(float(landing_duration) + 3.0, 7.0)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run PlannerManagerProcess with CrazyflieAgentProcess."
@@ -54,6 +58,9 @@ def main() -> None:
         float(args.execution_interval)
         if args.execution_interval is not None
         else float(planning_cfg["planner"]["agent_process_control_interval"])
+    )
+    agent_shutdown_timeout = _compute_agent_shutdown_timeout(
+        landing_duration=float(args.landing_duration),
     )
     agent_idle_sleep_time = float(
         planning_cfg["planner"]["agent_process_idle_sleep_time"]
@@ -156,10 +163,10 @@ def main() -> None:
             planner_process.terminate()
             planner_process.join(timeout=5.0)
 
-        agent_process.join(timeout=5.0)
+        agent_process.join(timeout=agent_shutdown_timeout)
         if agent_process.is_alive():
             agent_process.terminate()
-            agent_process.join(timeout=5.0)
+            agent_process.join(timeout=agent_shutdown_timeout)
 
     elapsed = time.monotonic() - start_time
     print(
