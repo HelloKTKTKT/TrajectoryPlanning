@@ -12,8 +12,8 @@ from trajplan.planning.messages import PlannerTickInput, PlannerTickOutput
 from trajplan.quadrotor.agent import QuadrotorAgent
 from trajplan.runtime.channels import PlannerManagerAgentQueues
 from trajplan.runtime.crazyflie.backend import CrazyflieBackend
-from trajplan.runtime.ipc import drain_latest, put_latest
 from trajplan.runtime.crazyflie.state_provider import MocapStateProvider
+from trajplan.runtime.ipc import drain_latest, put_latest
 from trajplan.visualization.messages import AgentVisualizationSnapshot
 
 
@@ -289,7 +289,7 @@ class CrazyflieAgentProcess(Process):
                 self.stop_event.set()
                 break
 
-        backend.stop()
+        # backend.stop()
 
     def _wait_for_state(
         self,
@@ -355,8 +355,6 @@ class CrazyflieAgentProcess(Process):
             agent_id=self.agent_id,
             timestamp=float(timestamp),
             state=current_state.copy(),
-            active_command=(
-                None if active_command is None else active_command.copy()
-            ),
+            active_command=(None if active_command is None else active_command.copy()),
         )
         put_latest(self.visualization_queue, snapshot)

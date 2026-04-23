@@ -7,7 +7,6 @@ import time
 from multiprocessing import Event, Queue
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = PROJECT_ROOT / "src"
 MPLCONFIGDIR = PROJECT_ROOT / "outputs" / ".matplotlib"
@@ -17,26 +16,21 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 
-from trajplan.config import (  # noqa: E402
-    build_grid_map_config,
-    load_project_configs,
-    load_swarm_scenario_config,
-)
+from trajplan.config import (build_grid_map_config,  # noqa: E402
+                             load_project_configs, load_swarm_scenario_config)
 from trajplan.planning.messages import (  # noqa: E402
-    NeighborTrajectoryMessage,
-    PlannerTickInput,
-    PlannerTickOutput,
-)
-from trajplan.runtime.channels import (  # noqa: E402
-    PlannerManagerAgentQueues,
-    PlannerSwarmQueues,
-)
-from trajplan.runtime.crazyflie.agent_process import CrazyflieAgentProcess  # noqa: E402
+    NeighborTrajectoryMessage, PlannerTickInput, PlannerTickOutput)
+from trajplan.runtime.channels import (PlannerManagerAgentQueues,  # noqa: E402
+                                       PlannerSwarmQueues)
+from trajplan.runtime.crazyflie.agent_process import \
+    CrazyflieAgentProcess  # noqa: E402
 from trajplan.runtime.ipc import drain_latest  # noqa: E402
-from trajplan.runtime.planner_manager_process import PlannerManagerProcess  # noqa: E402
-from trajplan.runtime.swarm_relay_process import SwarmRelayProcess  # noqa: E402
-from trajplan.visualization.live_visualizer import LiveVisualizer  # noqa: E402
-from trajplan.visualization.messages import AgentVisualizationSnapshot  # noqa: E402
+from trajplan.runtime.planner_manager_process import \
+    PlannerManagerProcess  # noqa: E402
+from trajplan.runtime.swarm_relay_process import \
+    SwarmRelayProcess  # noqa: E402
+from trajplan.visualization.messages import \
+    AgentVisualizationSnapshot  # noqa: E402
 
 
 def _has_abnormal_exit(processes: list[object]) -> bool:
@@ -96,7 +90,7 @@ def _parse_args() -> argparse.Namespace:
             "Defaults to 0..N-1."
         ),
     )
-    parser.add_argument("--max-runtime", type=float, default=60.0)
+    parser.add_argument("--max-runtime", type=float, default=30.0)
     parser.add_argument("--execution-interval", type=float, default=None)
     parser.add_argument("--ema-alpha", type=float, default=0.3)
     parser.add_argument("--takeoff-height", type=float, default=0.6)
@@ -177,7 +171,9 @@ def main() -> None:
             planning_interval=float(
                 planning_cfg["planner"]["pm_process_planning_interval"]
             ),
-            idle_sleep_time=float(planning_cfg["planner"]["pm_process_idle_sleep_time"]),
+            idle_sleep_time=float(
+                planning_cfg["planner"]["pm_process_idle_sleep_time"]
+            ),
             swarm_queues=PlannerSwarmQueues(
                 planner_to_relay=planner_to_relay_queue,
                 relay_to_planner=relay_to_planner_queue,
@@ -208,16 +204,16 @@ def main() -> None:
         stop_event=stop_event,
         idle_sleep_time=float(planning_cfg["planner"]["pm_process_idle_sleep_time"]),
     )
-    visualizer = (
-        LiveVisualizer(
+    visualizer = None
+    if args.visualize:
+        from trajplan.visualization.live_visualizer import LiveVisualizer
+
+        visualizer = LiveVisualizer(
             grid_map_config=build_grid_map_config(planning_cfg),
             title="Crazyflie Swarm Visualizer",
             agent_initial_positions=agent_initial_positions,
             agent_goal_positions=agent_goal_positions,
         )
-        if args.visualize
-        else None
-    )
 
     start_time = time.monotonic()
     mission_processes = [
@@ -259,7 +255,10 @@ def main() -> None:
                 break
 
             if all(not process.is_alive() for process in mission_processes):
-                print("[Main] all planner and crazyflie agent processes finished.", flush=True)
+                print(
+                    "[Main] all planner and crazyflie agent processes finished.",
+                    flush=True,
+                )
                 stop_event.set()
                 break
 

@@ -1,12 +1,13 @@
 from __future__ import annotations
+
 import numpy as np
 
-from trajplan.runtime.backend import CommonBackend
-from trajplan.runtime.state_provider import StateProvider
+from trajplan.controller import CommonController
 from trajplan.quadrotor.command import QuadrotorCommand
 from trajplan.quadrotor.state import QuadrotorState
+from trajplan.runtime.backend import CommonBackend
+from trajplan.runtime.state_provider import StateProvider
 from trajplan.shared_types import Vector
-from trajplan.controller import CommonController
 
 
 class QuadrotorAgent:
@@ -89,7 +90,7 @@ class QuadrotorAgent:
             self.is_finished = True
             self._clear_hover_reference()
             self.current_reference_pva = None
-            self.backend.stop()
+            # self.backend.stop()
             return
 
         elif command.is_hover:

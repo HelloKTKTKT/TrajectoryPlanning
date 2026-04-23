@@ -30,27 +30,27 @@ bspline_optimizer:
   safe_dist: 0.5
   swarm_sample_divisor: 5
 
-grid_map:
-  resolution: 0.1
-  map_size: [100, 100, 30]
-  origin: [0.0, 0.0, 0.0]
-  obstacles:
-    - obs_start_index: [60, 70, 0]
-      obs_size: [20, 5, 5]
-    - obs_start_index: [60, 70, 25]
-      obs_size: [20, 5, 5]      
-    - obs_start_index: [60, 70, 5]
-      obs_size: [5, 5, 20]
-    - obs_start_index: [75, 70, 5]
-      obs_size: [5, 5, 20]
-    - obs_start_index: [44, 44, 0]
-      obs_size: [12, 12, 30]
-    - obs_start_index: [20, 70, 0]
-      obs_size: [10, 10, 30]
-    - obs_start_index: [80, 30, 0]
-      obs_size: [10, 10, 30]
-    - obs_start_index: [30, 15, 0]
-      obs_size: [10, 10, 30]
+# grid_map:
+#   resolution: 0.1
+#   map_size: [100, 100, 30]
+#   origin: [0.0, 0.0, 0.0]
+#   obstacles:
+#     - obs_start_index: [60, 70, 0]
+#       obs_size: [20, 5, 5]
+#     - obs_start_index: [60, 70, 25]
+#       obs_size: [20, 5, 5]      
+#     - obs_start_index: [60, 70, 5]
+#       obs_size: [5, 5, 20]
+#     - obs_start_index: [75, 70, 5]
+#       obs_size: [5, 5, 20]
+#     - obs_start_index: [44, 44, 0]
+#       obs_size: [12, 12, 30]
+#     - obs_start_index: [20, 70, 0]
+#       obs_size: [10, 10, 30]
+#     - obs_start_index: [80, 30, 0]
+#       obs_size: [10, 10, 30]
+#     - obs_start_index: [30, 15, 0]
+#       obs_size: [10, 10, 30]
 
 # grid_map:
 #   resolution: 0.1
@@ -69,10 +69,10 @@ grid_map:
 #     - obs_start_index: [44, 44, 0]
 #       obs_size: [12, 12, 30]
 
-# grid_map:
-#   resolution: 0.1
-#   map_size: [30, 35, 20]
-#   origin: [-1.5, -1.5, 0.0]
-#   obstacles:
-#     - obs_start_index: [10, 13, 0]
-#       obs_size: [10, 4, 20]
+grid_map:
+  resolution: 0.1
+  map_size: [30, 35, 20]
+  origin: [-1.5, -1.5, 0.0]
+  obstacles:
+    - obs_start_index: [11, 11, 0]
+      obs_size: [8,7,15]
