@@ -5,6 +5,8 @@ import time
 from multiprocessing import Process
 from multiprocessing.synchronize import Event as ProcessEvent
 
+import numpy as np
+
 from trajplan.crazyflie_controller import CrazyflieController
 from trajplan.planning.messages import PlannerTickInput, PlannerTickOutput
 from trajplan.quadrotor.agent import QuadrotorAgent
@@ -191,11 +193,22 @@ class CrazyflieAgentProcess(Process):
 
             finally:
                 print(f"{self._log_prefix} landing ...", flush=True)
+                landing_confirmed = False
+                landing_wait_timeout = max(self.landing_duration + 2.0, 5.0)
                 try:
                     backend.land()
-                    time.sleep(self.landing_duration + 0.5)
+                    landing_confirmed = self._wait_for_landing_completion(
+                        state_provider=state_provider,
+                        timeout_sec=landing_wait_timeout,
+                    )
+                    if not landing_confirmed:
+                        print(
+                            f"{self._log_prefix} landing state was not confirmed within "
+                            f"{landing_wait_timeout:.2f}s.",
+                            flush=True,
+                        )
                 finally:
-                    if self.disarm_after_landing:
+                    if self.disarm_after_landing and landing_confirmed:
                         try:
                             backend.arm(False)
                         except Exception as exc:  # noqa: BLE001
@@ -203,6 +216,12 @@ class CrazyflieAgentProcess(Process):
                                 f"{self._log_prefix} arm(False) failed (ignored): {exc}",
                                 flush=True,
                             )
+                    elif self.disarm_after_landing:
+                        print(
+                            f"{self._log_prefix} automatic disarm skipped because landing "
+                            "could not be confirmed.",
+                            flush=True,
+                        )
                 print(f"{self._log_prefix} exiting", flush=True)
         finally:
             spin_executor.shutdown(timeout_sec=1.0)
@@ -284,6 +303,43 @@ class CrazyflieAgentProcess(Process):
             if time.monotonic() - start_time > timeout_sec:
                 return False
             time.sleep(self.idle_sleep_time)
+        return False
+
+    def _wait_for_landing_completion(
+        self,
+        state_provider: MocapStateProvider,
+        timeout_sec: float,
+    ) -> bool:
+        start_time = time.monotonic()
+        settled_sample_count = 0
+        target_height = self.landing_height + 0.05
+        vertical_speed_tolerance = 0.15
+
+        while time.monotonic() - start_time <= timeout_sec:
+            if not state_provider.is_initialized():
+                time.sleep(self.idle_sleep_time)
+                continue
+
+            try:
+                current_state = state_provider.get_state()
+            except RuntimeError:
+                time.sleep(self.idle_sleep_time)
+                continue
+
+            current_height = float(current_state.position[2])
+            vertical_speed = abs(float(current_state.velocity[2]))
+            if (
+                current_height <= target_height
+                and vertical_speed <= vertical_speed_tolerance
+            ):
+                settled_sample_count += 1
+                if settled_sample_count >= 3:
+                    return True
+            else:
+                settled_sample_count = 0
+
+            time.sleep(self.idle_sleep_time)
+
         return False
 
     def _publish_visualization_snapshot(
