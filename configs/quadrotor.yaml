@@ -18,8 +18,8 @@ physical:
   max_rpm: 6396.667
 
 limits:
-  max_velocity_3d: [2.0, 2.0, 2.0]
-  max_acceleration_3d: [3.0, 3.0, 3.0]
+  max_velocity_3d: [1.5, 1.5, 1.5]
+  max_acceleration_3d: [2.0, 2.0, 2.0]
   max_jerk_3d: [4.0, 4.0, 4.0]
 
 controller:

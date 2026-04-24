@@ -7,42 +7,48 @@ import time
 from multiprocessing import Event, Queue
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = PROJECT_ROOT / "src"
-MPLCONFIGDIR = PROJECT_ROOT / "outputs" / ".matplotlib"
-MPLCONFIGDIR.mkdir(parents=True, exist_ok=True)
-os.environ.setdefault("MPLCONFIGDIR", str(MPLCONFIGDIR))
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 
-from trajplan.config import (  # noqa: E402
-    build_grid_map_config,
-    load_project_configs,
-    load_swarm_scenario_config,
-)
+from trajplan.config import build_grid_map_config  # noqa: E402
+from trajplan.config import load_project_configs, load_swarm_scenario_config
 from trajplan.planning.messages import (  # noqa: E402
-    NeighborTrajectoryMessage,
-    PlannerTickInput,
-    PlannerTickOutput,
-    TargetStateMessage,
-)
-from trajplan.runtime.channels import (  # noqa: E402
-    PlannerManagerAgentQueues,
-    PlannerSwarmQueues,
-    PlannerTargetQueues,
-)
-from trajplan.runtime.crazyflie.agent_process import CrazyflieAgentProcess  # noqa: E402
-from trajplan.runtime.crazyflie.target_process import CrazyflieTargetProcess  # noqa: E402
+    NeighborTrajectoryMessage, PlannerTickInput, PlannerTickOutput,
+    TargetStateMessage)
+from trajplan.runtime.channels import PlannerManagerAgentQueues  # noqa: E402
+from trajplan.runtime.channels import PlannerSwarmQueues, PlannerTargetQueues
+from trajplan.runtime.crazyflie.agent_process import \
+    CrazyflieAgentProcess  # noqa: E402
+from trajplan.runtime.crazyflie.target_process import \
+    CrazyflieTargetProcess  # noqa: E402
 from trajplan.runtime.ipc import drain_latest  # noqa: E402
-from trajplan.runtime.planner_manager_process import PlannerManagerProcess  # noqa: E402
-from trajplan.runtime.swarm_relay_process import SwarmRelayProcess  # noqa: E402
-from trajplan.visualization.live_visualizer import LiveVisualizer  # noqa: E402
-from trajplan.visualization.messages import (  # noqa: E402
-    AgentVisualizationSnapshot,
-    TargetVisualizationSnapshot,
-)
+from trajplan.runtime.planner_manager_process import \
+    PlannerManagerProcess  # noqa: E402
+from trajplan.runtime.swarm_relay_process import \
+    SwarmRelayProcess  # noqa: E402
+
+
+def _create_visualizer(
+    args, planning_cfg, agent_initial_positions, agent_goal_positions
+):
+    """Lazy-load matplotlib and create the visualizer only when --visualize is used."""
+    if not args.visualize:
+        return None
+    mplconfigdir = PROJECT_ROOT / "outputs" / ".matplotlib"
+    mplconfigdir.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault("MPLCONFIGDIR", str(mplconfigdir))
+    from trajplan.visualization.live_visualizer import \
+        LiveVisualizer  # noqa: E402
+
+    return LiveVisualizer(
+        grid_map_config=build_grid_map_config(planning_cfg),
+        title="Crazyflie Swarm Following Visualizer",
+        agent_initial_positions=agent_initial_positions,
+        agent_goal_positions=agent_goal_positions,
+    )
 
 
 def _has_abnormal_exit(processes: list[object]) -> bool:
@@ -80,9 +86,9 @@ def _resolve_cf_indices(
             f"Expected non-negative --cf-indices, but got {resolved_cf_indices}."
         )
 
-    target_cf_index = resolved_cf_indices[-1] if has_target else None
+    target_cf_index = resolved_cf_indices[0] if has_target else None
     agent_cf_indices = (
-        resolved_cf_indices[:-1] if has_target else resolved_cf_indices.copy()
+        resolved_cf_indices[1:] if has_target else resolved_cf_indices.copy()
     )
     return agent_cf_indices, target_cf_index
 
@@ -174,9 +180,7 @@ def main() -> None:
     }
     agent_to_cf_mapping = {
         agent.agent_id: cf_index
-        for agent, cf_index in zip(
-            swarm_scenario.agents, agent_cf_indices, strict=True
-        )
+        for agent, cf_index in zip(swarm_scenario.agents, agent_cf_indices, strict=True)
     }
 
     for agent, cf_index in zip(swarm_scenario.agents, agent_cf_indices, strict=True):
@@ -203,7 +207,9 @@ def main() -> None:
             planning_interval=float(
                 planning_cfg["planner"]["pm_process_planning_interval"]
             ),
-            idle_sleep_time=float(planning_cfg["planner"]["pm_process_idle_sleep_time"]),
+            idle_sleep_time=float(
+                planning_cfg["planner"]["pm_process_idle_sleep_time"]
+            ),
             swarm_queues=PlannerSwarmQueues(
                 planner_to_relay=planner_to_relay_queue,
                 relay_to_planner=relay_to_planner_queue,
@@ -250,15 +256,8 @@ def main() -> None:
             visualization_queue=target_visualization_queue,
         )
     )
-    visualizer = (
-        LiveVisualizer(
-            grid_map_config=build_grid_map_config(planning_cfg),
-            title="Crazyflie Swarm Following Visualizer",
-            agent_initial_positions=agent_initial_positions,
-            agent_goal_positions=agent_goal_positions,
-        )
-        if args.visualize
-        else None
+    visualizer = _create_visualizer(
+        args, planning_cfg, agent_initial_positions, agent_goal_positions
     )
 
     start_time = time.monotonic()
@@ -308,7 +307,10 @@ def main() -> None:
                 break
 
             if all(not process.is_alive() for process in mission_processes):
-                print("[Main] all planner and crazyflie agent processes finished.", flush=True)
+                print(
+                    "[Main] all planner and crazyflie agent processes finished.",
+                    flush=True,
+                )
                 stop_event.set()
                 break
 
