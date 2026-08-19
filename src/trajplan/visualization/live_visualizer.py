@@ -54,6 +54,7 @@ class LiveVisualizer:
         goal_positions: Sequence[Vector] | None = None,
         agent_initial_positions: Mapping[int, Vector] | None = None,
         agent_goal_positions: Mapping[int, Sequence[Vector]] | None = None,
+        fig: plt.Figure | None = None,
     ) -> None:
         self.grid_map_config = grid_map_config
         self.title = str(title)
@@ -91,11 +92,16 @@ class LiveVisualizer:
         self._agent_history_positions: dict[int, list[np.ndarray]] = {}
         self._last_history_timestamp: dict[int, float] = {}
         self._agent_artists: dict[int, _AgentArtists] = {}
+        self._obstacle_artists: list[Poly3DCollection] = []
 
-        self._interactive_enabled = "agg" not in plt.get_backend().lower()
-
-        plt.ion()
-        self.fig = plt.figure(figsize=(10, 8))
+        self._owns_fig = fig is None
+        if fig is None:
+            self._interactive_enabled = "agg" not in plt.get_backend().lower()
+            plt.ion()
+            self.fig = plt.figure(figsize=(10, 8))
+        else:
+            self._interactive_enabled = False
+            self.fig = fig
         self.ax = self.fig.add_subplot(111, projection="3d")
 
         self._bounds = self._compute_axis_bounds(grid_map_config)
@@ -126,14 +132,18 @@ class LiveVisualizer:
             self._update_agent_artists(agent_id)
 
         self.fig.canvas.draw_idle()
-        if self._interactive_enabled:
+        if self._interactive_enabled and self._owns_fig:
             plt.pause(0.001)
 
     def close(self) -> None:
+        if not self._owns_fig:
+            return
         if plt.fignum_exists(self.fig.number):
             plt.close(self.fig)
 
     def wait_until_closed(self) -> None:
+        if not self._owns_fig:
+            return
         if not self._interactive_enabled:
             return
         if not plt.fignum_exists(self.fig.number):
@@ -141,6 +151,31 @@ class LiveVisualizer:
 
         plt.ioff()
         plt.show(block=True)
+
+    def add_obstacle_world(self, center: Vector, size: Vector) -> None:
+        center_arr = np.asarray(center, dtype=np.float64).reshape(3)
+        size_arr = np.asarray(size, dtype=np.float64).reshape(3)
+        min_corner = center_arr - size_arr / 2.0
+        faces = self._build_cuboid_faces(min_corner=min_corner, size=size_arr)
+        collection = Poly3DCollection(
+            faces,
+            facecolors="tab:red",
+            edgecolors="tab:red",
+            linewidths=0.5,
+            alpha=0.25,
+        )
+        self.ax.add_collection3d(collection)
+        self._obstacle_artists.append(collection)
+        self.fig.canvas.draw_idle()
+
+    def clear_obstacle_artists(self) -> None:
+        for collection in self._obstacle_artists:
+            try:
+                collection.remove()
+            except (ValueError, NotImplementedError):
+                pass
+        self._obstacle_artists.clear()
+        self.fig.canvas.draw_idle()
 
     def _ingest_agent_snapshot(
         self,
@@ -191,6 +226,7 @@ class LiveVisualizer:
                 alpha=0.25,
             )
             self.ax.add_collection3d(collection)
+            self._obstacle_artists.append(collection)
 
     def _draw_static_reference_points(self) -> None:
         for agent_id in self._known_agent_ids():

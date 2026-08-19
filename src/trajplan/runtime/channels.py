@@ -10,6 +10,8 @@ from trajplan.planning.messages import (
 )
 from trajplan.visualization.messages import (
     AgentVisualizationSnapshot,
+    GoalUpdateMessage,
+    ObstacleUpdateMessage,
     PlannerVisualizationSnapshot,
 )
 
@@ -30,3 +32,8 @@ class VisualizationQueues:
 class PlannerSwarmQueues:
     planner_to_relay: Queue[NeighborTrajectoryMessage]
     relay_to_planner: Queue[NeighborTrajectoryMessage]
+
+
+@dataclass(slots=True)
+class ControlQueues:
+    gui_to_planner: Queue[GoalUpdateMessage | ObstacleUpdateMessage]

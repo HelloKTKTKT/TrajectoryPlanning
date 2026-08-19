@@ -25,7 +25,11 @@ from trajplan.config import (
 from trajplan.planning.bspline_optimizer import BsplineOptimizer
 from trajplan.planning.local_planner import LocalPlanner
 from trajplan.shared_types import Vector
-from trajplan.visualization.messages import PlannerVisualizationSnapshot
+from trajplan.visualization.messages import (
+    GoalUpdateMessage,
+    ObstacleUpdateMessage,
+    PlannerVisualizationSnapshot,
+)
 
 
 class PlannerManagerProcess(Process):
@@ -41,6 +45,7 @@ class PlannerManagerProcess(Process):
         idle_sleep_time: float,
         swarm_queues: PlannerSwarmQueues | None = None,
         visualization_queue: Any | None = None,
+        control_queue: Any | None = None,
     ) -> None:
         super().__init__()
         self.agent_id = int(agent_id)
@@ -56,9 +61,11 @@ class PlannerManagerProcess(Process):
             for goal_position in goal_positions
         ]
         self.visualization_queue = visualization_queue
+        self.control_queue = control_queue
 
         # Placeholder only. The real object will be constructed in run().
         self.planner_manager: PlannerManager | None = None
+        self.grid_map: GridMap | None = None
         self._pending_neighbor_update: bool = False
 
     def run(self) -> None:
@@ -72,6 +79,7 @@ class PlannerManagerProcess(Process):
         planner_manager_config = build_planner_manager_config(self.planning_cfg)
 
         grid_map = GridMap.from_config(grid_map_config)
+        self.grid_map = grid_map
         bspline_optimizer = BsplineOptimizer(config=bspline_optimizer_config)
         local_planner = LocalPlanner(
             optimizer=bspline_optimizer,
@@ -89,6 +97,9 @@ class PlannerManagerProcess(Process):
             self._pending_neighbor_update = (
                 self._drain_swarm_messages() or self._pending_neighbor_update
             )
+
+            if self.control_queue is not None:
+                self._drain_control_messages()
 
             tick_input = drain_latest(self.planner_manager_agent_queues.agent_to_pm)
             if not isinstance(tick_input, PlannerTickInput):
@@ -137,6 +148,46 @@ class PlannerManagerProcess(Process):
 
             if getattr(command, "is_finish", False):
                 break
+
+    def _drain_control_messages(self) -> None:
+        if self.planner_manager is None or self.grid_map is None:
+            return
+
+        for message in drain_all(self.control_queue):
+            if isinstance(message, GoalUpdateMessage):
+                self.planner_manager.replace_active_goal(message.goal_position)
+                print(
+                    f"[PlannerManagerProcess {self.agent_id}] "
+                    f"goal updated to {message.goal_position.tolist()}.",
+                    flush=True,
+                )
+            elif isinstance(message, ObstacleUpdateMessage):
+                if message.action == "clear":
+                    self.grid_map.clear_obstacles()
+                    print(
+                        f"[PlannerManagerProcess {self.agent_id}] obstacles cleared.",
+                        flush=True,
+                    )
+                elif message.center is not None and message.size is not None:
+                    self._add_world_obstacle(message.center, message.size)
+
+    def _add_world_obstacle(self, center: np.ndarray, size: np.ndarray) -> None:
+        if self.grid_map is None:
+            return
+
+        center_arr = np.asarray(center, dtype=np.float64).reshape(3)
+        size_arr = np.asarray(size, dtype=np.float64).reshape(3)
+        min_corner = center_arr - size_arr / 2.0
+        max_corner = min_corner + size_arr
+
+        start_idx = self.grid_map.world_to_grid(min_corner)
+        end_idx = self.grid_map.world_to_grid(max_corner)
+        obs_size = np.maximum(end_idx - start_idx + 1, 1).astype(np.int64)
+
+        self.grid_map.add_obstacle(
+            obs_start_index=start_idx,
+            obs_size=obs_size,
+        )
 
     def _drain_swarm_messages(self) -> bool:
         if self.swarm_queues is None:

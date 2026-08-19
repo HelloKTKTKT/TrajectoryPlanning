@@ -173,6 +173,12 @@ class PlannerManager:
         for goal_position in goal_positions:
             self.add_goal(goal_position)
 
+    def replace_active_goal(self, goal_position: Vector) -> None:
+        goal = self._validate_goal_position(goal_position)
+        self.active_goal_position = goal
+        self.goal_position_list.clear()
+        self._reset_global_guidance()
+
     def update_and_get_command(
         self,
         current_state: QuadrotorState,
